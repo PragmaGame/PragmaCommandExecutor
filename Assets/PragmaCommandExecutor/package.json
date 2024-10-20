@@ -1,0 +1,12 @@
+﻿{
+  "name": "com.pragma.commandexecutor",
+  "displayName": "Pragma CommandExecutor",
+  "version": "0.0.1",
+  "author": {
+    "name": "Pragma",
+    "email": "pragmagame@gmail.com",
+    "url": "https://github.com/PragmaGame"
+  },
+  "license": "MIT"
+}
+
