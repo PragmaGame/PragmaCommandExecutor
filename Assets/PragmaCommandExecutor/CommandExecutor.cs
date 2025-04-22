@@ -12,7 +12,9 @@ namespace Pragma.CommandExecutor
 
         public CommandExecutor(ICommandProcessorFactory factory = null)
         {
-            if (factory == null)
+            _factory = factory;
+            
+            if (_factory == null)
             {
                 _factory = new CommandProcessorFactory();
             }
