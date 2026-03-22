@@ -10,7 +10,7 @@ namespace Pragma.CommandExecutor
         
         UniTask Execute(TCommand command, CancellationToken cancellationToken = default);
 
-        UniTask ICommandProcessor.Execute(object command, CancellationToken cancellationToken = default)
+        UniTask ICommandProcessor.Execute(object command, CancellationToken cancellationToken)
         {
             if (command is not TCommand convert)
             {
