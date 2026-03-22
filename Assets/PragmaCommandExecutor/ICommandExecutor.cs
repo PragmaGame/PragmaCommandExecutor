@@ -6,8 +6,7 @@ namespace Pragma.CommandExecutor
 {
     public interface ICommandExecutor
     {
-        public UniTask Execute(IEnumerable<ICommand> commands, CancellationToken token,
-            ExecuteFormat format = ExecuteFormat.Parallel);
+        public UniTask Execute(List<ICommand> commands, CommandExecuteFormat executeFormat, CancellationToken token = default);
         public UniTask Execute(ICommand command, CancellationToken token);
     }
 }

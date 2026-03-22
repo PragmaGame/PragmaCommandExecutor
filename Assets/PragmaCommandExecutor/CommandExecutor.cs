@@ -1,81 +1,90 @@
-using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using UnityEngine.Pool;
 
 namespace Pragma.CommandExecutor
 {
-    public class CommandExecutor : ICommandExecutor
+    public partial class CommandExecutor : ICommandExecutor
     {
-        private Dictionary<Type, Stack<ICommandProcessor>> _pool;
-        private ICommandProcessorFactory _factory;
-
-        public CommandExecutor(ICommandProcessorFactory factory = null)
+        private ICommandProcessorPool _processorPool;
+        
+        public CommandExecutor(ICommandProcessorPool processorPool)
         {
-            _factory = factory;
-            
-            if (_factory == null)
-            {
-                _factory = new CommandProcessorFactory();
-            }
-
-            _pool = new Dictionary<Type, Stack<ICommandProcessor>>();
-        }
-
-        public UniTask Execute(IEnumerable<ICommand> commands, CancellationToken token, ExecuteFormat format = ExecuteFormat.Parallel)
-        {
-            return format switch
-            {
-                ExecuteFormat.Parallel => ParallelExecute(commands, token),
-                ExecuteFormat.Sequence => SequenceExecute(commands, token),
-                _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Incorrect execution format")
-            };
+            _processorPool = processorPool ?? new DefaultCommandProcessorPool(null);
         }
         
-        public async UniTask Execute(ICommand command, CancellationToken token)
+        public void AddFactory(ICommandProcessorFactory factory)
         {
-            var processor = Get(command);
-            
-            await processor.Execute(command, token);
-                
-            Release(command.ProcessorType, processor);
+            _processorPool.AddFactory(factory);
         }
-
-        private async UniTask ParallelExecute(IEnumerable<ICommand> commands, CancellationToken token)
+        
+        private async UniTask ExecuteConcrete(ICommand command, CancellationToken token = default)
         {
-            await UniTask.WhenAll(commands.Select(command => Execute(command, token)));
-        }
+            var processor = _processorPool.Get(command.GetType());
 
-        private async UniTask SequenceExecute(IEnumerable<ICommand> commands, CancellationToken token)
-        {
-            foreach (var command in commands)
-            { 
-                await Execute(command, token);
-            }
-        }
-
-        private ICommandProcessor Get(ICommand command)
-        {
-            var processorType = command.ProcessorType;
-            
-            if(_pool.TryGetValue(processorType, out var processors))
+            if (processor == null)
             {
-                if (processors.TryPop(out var processor))
-                {
-                    return processor;
-                }
+                return;
+            }
+            
+            try
+            {
+                await processor.Execute(command, token).SuppressCancellationThrow();
+            }
+            finally
+            {
+                _processorPool.Release(processor);
+            }
+        }
+        
+        public async UniTask Execute(List<ICommand> commands, CommandExecuteFormat executeFormat, CancellationToken token = default)
+        {
+            if (executeFormat == CommandExecuteFormat.Parallel)
+            {
+                var tasks = ListPool<UniTask>.Get();
 
-                return _factory.Create(processorType);
+                try
+                {
+                    foreach (var command in commands)
+                    {
+                        tasks.Add(Execute(command, token));
+                    }
+
+                    await UniTask.WhenAll(tasks).SuppressCancellationThrow();
+                }
+                finally
+                {
+                    ListPool<UniTask>.Release(tasks);
+                }
+            }
+            else
+            {
+                foreach (var command in commands)
+                {
+                    if (token.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
+                    var cancelled = await Execute(command, token).SuppressCancellationThrow();
+
+                    if (cancelled)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+        
+        public UniTask Execute(ICommand command, CancellationToken token)
+        {
+            if (command is CommandGroup group)
+            {
+                return Execute(group, token);
             }
 
-            _pool.Add(processorType, new Stack<ICommandProcessor>());
-            
-            return _factory.Create(processorType);
-        }
-
-        private void Release(Type processorType, ICommandProcessor processor)
-        {
-            _pool[processorType].Push(processor);
+            return ExecuteConcrete(command, token);
         }
     }
 }
