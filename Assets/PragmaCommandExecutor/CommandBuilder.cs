@@ -147,7 +147,7 @@ namespace Pragma.CommandExecutor
             instance.From = from;
             instance.To = to;
             instance.Duration = duration;
-            instance.Curve = curve ?? AnimationCurve.Linear(0f, 0f, 1f, 1f);
+            instance.Curve = curve;
             _stack[^1].Commands.Add(instance);
             return this;
         }

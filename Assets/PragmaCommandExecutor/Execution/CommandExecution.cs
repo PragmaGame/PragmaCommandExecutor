@@ -152,7 +152,8 @@ namespace Pragma.CommandExecutor
 
                 if (_releaseCommand)
                 {
-                    _executor.ReleaseCommand(_command, _excluded);
+                    // An empty set would still cost a lookup per released child.
+                    _executor.ReleaseCommand(_command, _excluded.Count > 0 ? _excluded : null);
                 }
             }
             catch (Exception exception)

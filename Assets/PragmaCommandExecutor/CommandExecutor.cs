@@ -5,9 +5,11 @@ namespace Pragma.CommandExecutor
 {
     public partial class CommandExecutor : ICommandExecutor, IDisposable
     {
-        private readonly Dictionary<Type, Type> _registrations;
-        private readonly ITypedPool<ICommandProcessor> _processorsPool;
+        // Keyed by command type: one lookup per started command finds both the processor type and its pool.
+        private readonly Dictionary<Type, ProcessorSlot> _slots = new();
+        private readonly IObjectFactory _defaultFactory = new ActivatorFactory();
         private readonly ITypedPool<ICommand> _commandsPool;
+        private IObjectFactory _factory;
 
         private readonly List<CommandExecution> _executions = new();
         private readonly Stack<CommandExecution> _executionsPool = new();
@@ -30,8 +32,7 @@ namespace Pragma.CommandExecutor
 
         internal CommandExecutor(IObjectFactory factory, IEnumerable<ICommandRegistrationContext> registrationContexts, bool autoTick)
         {
-            _registrations = new Dictionary<Type, Type>();
-            _processorsPool = new TypedPool<ICommandProcessor>(factory);
+            _factory = factory ?? _defaultFactory;
             _commandsPool = new TypedPool<ICommand>(null);
 
             if (registrationContexts != null)
@@ -40,7 +41,7 @@ namespace Pragma.CommandExecutor
                 {
                     foreach (var pair in context.Registrations)
                     {
-                        _registrations[pair.Key] = pair.Value;
+                        AddRegistration(pair.Key, pair.Value);
                     }
                 }
             }
@@ -55,12 +56,18 @@ namespace Pragma.CommandExecutor
 
         public void SetFactory(IObjectFactory factory)
         {
-            _processorsPool.SetFactory(factory);
+            _factory = factory ?? _defaultFactory;
         }
 
         public void AddRegistration(Type commandType, Type processorType)
         {
-            _registrations[commandType] = processorType;
+            if (_slots.TryGetValue(commandType, out var slot) && slot.ProcessorType == processorType)
+            {
+                return;
+            }
+
+            // Runs that still hold a processor of the replaced registration return it to the detached slot.
+            _slots[commandType] = new ProcessorSlot(processorType);
         }
 
         public void AddRegistration<TCommand, TProcessor>()
@@ -186,28 +193,35 @@ namespace Pragma.CommandExecutor
             }
         }
 
-        internal ICommandProcessor GetProcessor(ICommand command)
+        internal ProcessorSlot GetProcessorSlot(ICommand command)
         {
             var commandType = command.GetType();
 
-            if (!_registrations.TryGetValue(commandType, out var processorType))
+            if (!_slots.TryGetValue(commandType, out var slot))
             {
                 throw new ArgumentException($"Command processor for type '{commandType}' not found");
             }
 
-            var processor = _processorsPool.Get(processorType);
+            return slot;
+        }
 
-            if (processor is null)
+        internal ICommandProcessor RentProcessor(ProcessorSlot slot)
+        {
+            if (slot.TryRent(out var processor))
+            {
+                return processor;
+            }
+
+            var processorType = slot.ProcessorType;
+
+            if (!(_factory.TryCreate(processorType, out var instance) || _defaultFactory.TryCreate(processorType, out instance))
+                || instance is not ICommandProcessor created)
             {
                 throw new InvalidOperationException($"Command processor '{processorType}' cannot be created");
             }
 
-            return processor;
-        }
-
-        internal void ReleaseProcessor(ICommandProcessor processor)
-        {
-            _processorsPool.Release(processor);
+            slot.OnCreated(created);
+            return created;
         }
 
         internal CommandNode CreateNode(ICommand command, CommandExecution execution)

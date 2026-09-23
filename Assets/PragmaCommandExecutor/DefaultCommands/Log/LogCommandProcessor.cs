@@ -2,7 +2,7 @@
 
 namespace Pragma.CommandExecutor
 {
-    public class LogCommandProcessor : ICommandProcessor<LogCommand>
+    public class LogCommandProcessor : ICommandProcessor<LogCommand>, IStatelessCommandProcessor
     {
         [UnityEngine.Scripting.RequiredMember]
         public LogCommandProcessor()

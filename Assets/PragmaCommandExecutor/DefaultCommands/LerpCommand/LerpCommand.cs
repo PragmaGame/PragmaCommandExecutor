@@ -10,15 +10,19 @@ namespace Pragma.CommandExecutor
         [field: SerializeField] public TValue From { get; set; }
         [field: SerializeField] public TValue To { get; set; }
         [field: SerializeField] public float Duration { get; set; } = 0.2f;
-        [field: SerializeField] public AnimationCurve Curve { get; set; } = AnimationCurve.Linear(0f, 0f, 1f, 1f);
-        
+
+        /// <summary>
+        /// Maps normalized time to the lerp factor. <c>null</c> or a curve without keys means linear.
+        /// </summary>
+        [field: SerializeField] public AnimationCurve Curve { get; set; }
+
         public void Reset()
         {
             Context = null;
             From = default;
             To = default;
             Duration = 0.2f;
-            Curve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
+            Curve = null;
         }
     }
 }

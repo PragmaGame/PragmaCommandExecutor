@@ -21,10 +21,11 @@ handle.OnFinished(result => Debug.Log(result.Outcome));
 handle.Cancel();
 ```
 Custom commands are processed by an `ICommandProcessor<TCommand>`: `Start` runs once, `Tick(deltaTime)` is called every frame
-while the processor returns `CommandStatus.Running`.
+while the processor returns `CommandStatus.Running`. Processors are pooled, one instance per run; a processor that keeps
+no per-run state can implement `IStatelessCommandProcessor` to be shared by all runs instead.
 
 ## UniTask support
-Add `PRAGMA_COMMAND_EXECUTOR_UNITASK_SUPPORT` to *Player Settings → Scripting Define Symbols* to compile
+Add `COMMAND_EXECUTOR_UNITASK_SUPPORT` to *Player Settings → Scripting Define Symbols* to compile
 `Pragma.CommandExecutor.UniTask`. It makes `CommandHandle` awaitable, restores the token based overloads
 (`await executor.Execute(command, token)`, `await builder.Execute(token)`) and provides `AsyncCommandProcessor<TCommand>`
 for processors written with `async UniTask`.

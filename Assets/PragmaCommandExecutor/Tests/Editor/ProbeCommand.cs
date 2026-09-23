@@ -10,6 +10,7 @@ namespace Pragma.CommandExecutor.Tests
         public bool ThrowOnStart { get; set; }
         public bool ThrowOnTick { get; set; }
         public List<string> Log { get; set; }
+        public List<ICommandProcessor> Processors { get; set; }
 
         public void Reset()
         {
@@ -18,6 +19,7 @@ namespace Pragma.CommandExecutor.Tests
             ThrowOnStart = false;
             ThrowOnTick = false;
             Log = null;
+            Processors = null;
         }
     }
 
@@ -33,6 +35,7 @@ namespace Pragma.CommandExecutor.Tests
         {
             _command = command;
             _remaining = command.Frames;
+            command.Processors?.Add(this);
             Write("start");
 
             if (command.ThrowOnStart)
@@ -79,6 +82,28 @@ namespace Pragma.CommandExecutor.Tests
         private void Write(string stage)
         {
             _command.Log.Add($"{stage}:{_command.Name}");
+        }
+    }
+
+    public class StatelessProbeCommand : ICommand
+    {
+        public List<ICommandProcessor> Processors { get; set; }
+
+        public void Reset()
+        {
+            Processors = null;
+        }
+    }
+
+    /// <summary>
+    /// Records the processor instance that served the run and completes on the first tick.
+    /// </summary>
+    public class StatelessProbeProcessor : ICommandProcessor<StatelessProbeCommand>, IStatelessCommandProcessor
+    {
+        public CommandStatus Start(StatelessProbeCommand command)
+        {
+            command.Processors.Add(this);
+            return CommandStatus.Running;
         }
     }
 }

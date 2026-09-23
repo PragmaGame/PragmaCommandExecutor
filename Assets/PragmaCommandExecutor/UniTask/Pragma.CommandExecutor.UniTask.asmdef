@@ -12,7 +12,7 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [
-        "PRAGMA_COMMAND_EXECUTOR_UNITASK_SUPPORT"
+        "COMMAND_EXECUTOR_UNITASK_SUPPORT"
     ],
     "versionDefines": [],
     "noEngineReferences": false

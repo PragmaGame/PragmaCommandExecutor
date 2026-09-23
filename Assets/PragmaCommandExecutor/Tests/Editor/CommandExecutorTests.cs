@@ -16,6 +16,7 @@ namespace Pragma.CommandExecutor.Tests
 
         private CommandExecutor _executor;
         private List<string> _log;
+        private List<GameObject> _gameObjects;
 
         [SetUp]
         public void SetUp()
@@ -26,13 +27,20 @@ namespace Pragma.CommandExecutor.Tests
                 autoTick: false);
 
             _executor.AddRegistration<ProbeCommand, ProbeProcessor>();
+            _executor.AddRegistration<StatelessProbeCommand, StatelessProbeProcessor>();
             _log = new List<string>();
+            _gameObjects = new List<GameObject>();
         }
 
         [TearDown]
         public void TearDown()
         {
             _executor.Dispose();
+
+            foreach (var gameObject in _gameObjects)
+            {
+                Object.DestroyImmediate(gameObject);
+            }
         }
 
         [Test]
@@ -170,31 +178,74 @@ namespace Pragma.CommandExecutor.Tests
         [Test]
         public void Scale_LerpsLocalScaleOverDuration()
         {
-            var transform = new GameObject(nameof(Scale_LerpsLocalScaleOverDuration)).transform;
+            var transform = CreateTransform();
+            var handle = _executor.Execute(Scale(transform, curve: null));
 
-            try
-            {
-                var handle = _executor.Execute(new ScaleCommand
-                {
-                    Context = transform,
-                    From = Vector3.zero,
-                    To = Vector3.one,
-                    Duration = Frame * 2,
-                });
+            AssertApproximately(Vector3.zero, transform.localScale);
 
-                AssertApproximately(Vector3.zero, transform.localScale);
+            Tick();
+            AssertApproximately(Vector3.one * 0.5f, transform.localScale);
 
-                Tick();
-                AssertApproximately(Vector3.one * 0.5f, transform.localScale);
+            Tick();
+            AssertApproximately(Vector3.one, transform.localScale);
+            Assert.IsFalse(handle.IsRunning);
+        }
 
-                Tick();
-                AssertApproximately(Vector3.one, transform.localScale);
-                Assert.IsFalse(handle.IsRunning);
-            }
-            finally
-            {
-                Object.DestroyImmediate(transform.gameObject);
-            }
+        [Test]
+        public void Scale_EmptyCurve_IsLinear()
+        {
+            // Unity deserializes a curve left unset in the inspector as a curve without keys.
+            var transform = CreateTransform();
+            _executor.Execute(Scale(transform, new AnimationCurve()));
+
+            Tick();
+            AssertApproximately(Vector3.one * 0.5f, transform.localScale);
+        }
+
+        [Test]
+        public void Scale_AppliesCurve()
+        {
+            var transform = CreateTransform();
+            var handle = _executor.Execute(Scale(transform, AnimationCurve.Linear(0f, 1f, 1f, 0f)));
+
+            AssertApproximately(Vector3.one, transform.localScale);
+
+            Tick(2);
+            AssertApproximately(Vector3.zero, transform.localScale);
+            Assert.IsFalse(handle.IsRunning);
+        }
+
+        [Test]
+        public void StatelessProcessor_IsSharedByAllRuns()
+        {
+            var processors = new List<ICommandProcessor>();
+
+            var first = _executor.Execute(Parallel(StatelessProbe(processors), StatelessProbe(processors)));
+            var second = _executor.Execute(StatelessProbe(processors));
+
+            Assert.AreEqual(3, processors.Count);
+            Assert.AreEqual(1, processors.Distinct().Count());
+
+            Tick();
+            Assert.IsFalse(first.IsRunning);
+            Assert.IsFalse(second.IsRunning);
+        }
+
+        [Test]
+        public void StatefulProcessor_IsTakenPerRun_AndReusedAfterFinish()
+        {
+            var processors = new List<ICommandProcessor>();
+            var a = Probe("a", 1);
+            var b = Probe("b", 1);
+            a.Processors = processors;
+            b.Processors = processors;
+
+            _executor.Execute(Parallel(a, b));
+            Assert.AreNotSame(processors[0], processors[1]);
+
+            Tick();
+            _executor.Execute(a);
+            CollectionAssert.Contains(processors.Take(2).ToList(), processors[2]);
         }
 
         [Test]
@@ -359,6 +410,30 @@ namespace Pragma.CommandExecutor.Tests
         private ProbeCommand Probe(string name, int frames)
         {
             return new ProbeCommand { Name = name, Frames = frames, Log = _log };
+        }
+
+        private static StatelessProbeCommand StatelessProbe(List<ICommandProcessor> processors)
+        {
+            return new StatelessProbeCommand { Processors = processors };
+        }
+
+        private static ScaleCommand Scale(Transform transform, AnimationCurve curve)
+        {
+            return new ScaleCommand
+            {
+                Context = transform,
+                From = Vector3.zero,
+                To = Vector3.one,
+                Duration = Frame * 2,
+                Curve = curve,
+            };
+        }
+
+        private Transform CreateTransform()
+        {
+            var gameObject = new GameObject(TestContext.CurrentContext.Test.Name);
+            _gameObjects.Add(gameObject);
+            return gameObject.transform;
         }
 
         private static CommandGroup Sequence(params ICommand[] commands)

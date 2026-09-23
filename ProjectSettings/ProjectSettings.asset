@@ -810,7 +810,10 @@ PlayerSettings:
   webGLCloseOnQuit: 0
   webWasm2023: 0
   webEnableSubmoduleStrippingCompatibility: 0
-  scriptingDefineSymbols: {}
+  scriptingDefineSymbols:
+    Android: COMMAND_EXECUTOR_UNITASK_SUPPORT
+    Standalone: COMMAND_EXECUTOR_UNITASK_SUPPORT
+    iPhone: COMMAND_EXECUTOR_UNITASK_SUPPORT
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend: {}

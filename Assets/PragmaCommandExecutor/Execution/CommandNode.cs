@@ -31,6 +31,7 @@ namespace Pragma.CommandExecutor
     internal sealed class ProcessorNode : CommandNode
     {
         private ICommand _command;
+        private ProcessorSlot _slot;
         private ICommandProcessor _processor;
 
         public ProcessorNode(CommandExecutor executor) : base(executor)
@@ -45,7 +46,8 @@ namespace Pragma.CommandExecutor
 
         public override CommandStatus Start()
         {
-            _processor = Executor.GetProcessor(_command);
+            _slot = Executor.GetProcessorSlot(_command);
+            _processor = Executor.RentProcessor(_slot);
             return _processor.Start(_command);
         }
 
@@ -79,10 +81,11 @@ namespace Pragma.CommandExecutor
                     Debug.LogException(exception);
                 }
 
-                Executor.ReleaseProcessor(_processor);
+                _slot.Return(_processor);
                 _processor = null;
             }
 
+            _slot = null;
             _command = null;
             Execution = null;
             Executor.ReturnNode(this);

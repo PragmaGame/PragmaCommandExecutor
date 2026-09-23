@@ -6,12 +6,18 @@ namespace Pragma.CommandExecutor
         where TCommand : LerpCommand<TValue>
     {
         private TCommand _command;
+        private AnimationCurve _curve;
         private float _elapsed;
 
         public CommandStatus Start(TCommand command)
         {
             _command = command;
             _elapsed = 0f;
+
+            // Unity deserializes a curve left unset in the inspector as an empty one.
+            var curve = command.Curve;
+            _curve = curve != null && curve.length > 0 ? curve : null;
+
             return Evaluate();
         }
 
@@ -24,6 +30,7 @@ namespace Pragma.CommandExecutor
         public void Shutdown()
         {
             _command = default;
+            _curve = null;
             _elapsed = 0f;
         }
 
@@ -40,7 +47,7 @@ namespace Pragma.CommandExecutor
             }
 
             var progress = _command.Duration > 0f ? Mathf.Clamp01(_elapsed / _command.Duration) : 1f;
-            var t = _command.Curve?.Evaluate(progress) ?? progress;
+            var t = _curve?.Evaluate(progress) ?? progress;
 
             Apply(context, Lerp(_command.From, _command.To, t));
 

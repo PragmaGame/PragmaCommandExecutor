@@ -34,6 +34,7 @@ namespace Pragma.CommandExecutor
     /// Runs one command instance. A processor is taken from the pool for a single run:
     /// <see cref="Start"/> → <see cref="Tick"/> once per frame while it reports <see cref="CommandStatus.Running"/>
     /// → <see cref="Cancel"/> only if the run is interrupted while running → <see cref="Shutdown"/> → back to the pool.
+    /// An <see cref="IStatelessCommandProcessor"/> goes through the same calls, but one instance serves all runs.
     /// </summary>
     public interface ICommandProcessor
     {

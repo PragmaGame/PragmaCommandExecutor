@@ -1,6 +1,6 @@
 ﻿namespace Pragma.CommandExecutor
 {
-    public class CallbackCommandProcessor : ICommandProcessor<CallbackCommand>
+    public class CallbackCommandProcessor : ICommandProcessor<CallbackCommand>, IStatelessCommandProcessor
     {
         [UnityEngine.Scripting.RequiredMember]
         public CallbackCommandProcessor()
