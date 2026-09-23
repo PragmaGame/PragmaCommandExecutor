@@ -12,7 +12,7 @@ namespace Pragma.CommandExecutor
         /// <summary>
         /// Starts <paramref name="commands"/> as an ad-hoc group. The caller keeps ownership of the list and its commands.
         /// </summary>
-        public CommandHandle Execute(IReadOnlyList<ICommand> commands, CommandExecuteFormat executeFormat);
+        public CommandHandle Execute(IReadOnlyList<ICommand> commands, GroupMode mode);
 
         /// <summary>
         /// Starts the command tree and releases it via <see cref="ReleaseCommand"/> once the run finishes
@@ -22,6 +22,6 @@ namespace Pragma.CommandExecutor
 
         public TCommand GetCommand<TCommand>() where TCommand : ICommand;
         public void ReleaseCommand(ICommand command, HashSet<ICommand> excluded = null);
-        public CommandBuilder GetBuilder(CommandExecuteFormat executeFormat);
+        public CommandBuilder GetBuilder(GroupMode mode);
     }
 }

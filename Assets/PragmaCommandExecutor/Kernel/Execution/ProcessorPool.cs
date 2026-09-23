@@ -7,14 +7,14 @@ namespace Pragma.CommandExecutor
     /// Processors of one command registration: pooled per-run instances,
     /// or the single shared instance of an <see cref="IStatelessCommandProcessor"/>.
     /// </summary>
-    internal sealed class ProcessorSlot
+    internal sealed class ProcessorPool
     {
-        private readonly Stack<ICommandProcessor> _pool = new();
+        private readonly Stack<ICommandProcessor> _instances = new();
         private ICommandProcessor _shared;
 
         public Type ProcessorType { get; }
 
-        public ProcessorSlot(Type processorType)
+        public ProcessorPool(Type processorType)
         {
             ProcessorType = processorType;
         }
@@ -22,7 +22,7 @@ namespace Pragma.CommandExecutor
         public bool TryRent(out ICommandProcessor processor)
         {
             processor = _shared;
-            return processor != null || _pool.TryPop(out processor);
+            return processor != null || _instances.TryPop(out processor);
         }
 
         public void OnCreated(ICommandProcessor processor)
@@ -37,7 +37,7 @@ namespace Pragma.CommandExecutor
         {
             if (!ReferenceEquals(processor, _shared))
             {
-                _pool.Push(processor);
+                _instances.Push(processor);
             }
         }
     }

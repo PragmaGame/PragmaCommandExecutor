@@ -5,10 +5,11 @@ using UnityEngine;
 namespace Pragma.CommandExecutor
 {
     /// <summary>
-    /// Root of a single run: owns the runtime node tree, the cancellation flag and the completion listeners.
-    /// Pooled by <see cref="CommandExecutor"/>; <see cref="Version"/> is bumped on finish so stale handles are detected.
+    /// Runs one command tree at a time: owns the runtime node tree, the cancellation flag and the completion listeners.
+    /// Pooled by <see cref="CommandExecutor"/> and reused for other trees; <see cref="Version"/> is bumped on finish
+    /// so stale handles are detected.
     /// </summary>
-    internal sealed class CommandExecution
+    internal sealed class TreeRunner
     {
         private readonly CommandExecutor _executor;
         private readonly List<Action<CommandResult>> _listeners = new();
@@ -23,7 +24,7 @@ namespace Pragma.CommandExecutor
         public bool IsFinished { get; private set; } = true;
         public bool IsCancelRequested { get; private set; }
 
-        public CommandExecution(CommandExecutor executor)
+        public TreeRunner(CommandExecutor executor)
         {
             _executor = executor;
         }
@@ -31,7 +32,7 @@ namespace Pragma.CommandExecutor
         public void Start(
             ICommand command,
             IReadOnlyList<ICommand> commands,
-            CommandExecuteFormat executeFormat,
+            GroupMode mode,
             bool releaseCommand,
             HashSet<ICommand> excluded)
         {
@@ -53,7 +54,7 @@ namespace Pragma.CommandExecutor
             {
                 _root = command != null
                     ? _executor.CreateNode(command, this)
-                    : _executor.CreateGroupNode(commands, executeFormat, 0, this);
+                    : _executor.CreateGroupNode(commands, mode, 0, this);
 
                 status = _root.Start();
             }

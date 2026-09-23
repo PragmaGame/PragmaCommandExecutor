@@ -11,7 +11,7 @@ namespace Pragma.CommandExecutor
     internal abstract class CommandNode
     {
         protected readonly CommandExecutor Executor;
-        protected CommandExecution Execution;
+        protected TreeRunner Runner;
 
         protected CommandNode(CommandExecutor executor)
         {
@@ -31,23 +31,23 @@ namespace Pragma.CommandExecutor
     internal sealed class ProcessorNode : CommandNode
     {
         private ICommand _command;
-        private ProcessorSlot _slot;
+        private ProcessorPool _processorPool;
         private ICommandProcessor _processor;
 
         public ProcessorNode(CommandExecutor executor) : base(executor)
         {
         }
 
-        public void Setup(CommandExecution execution, ICommand command)
+        public void Setup(TreeRunner runner, ICommand command)
         {
-            Execution = execution;
+            Runner = runner;
             _command = command;
         }
 
         public override CommandStatus Start()
         {
-            _slot = Executor.GetProcessorSlot(_command);
-            _processor = Executor.RentProcessor(_slot);
+            _processorPool = Executor.GetProcessorPool(_command);
+            _processor = Executor.RentProcessor(_processorPool);
             return _processor.Start(_command);
         }
 
@@ -81,13 +81,13 @@ namespace Pragma.CommandExecutor
                     Debug.LogException(exception);
                 }
 
-                _slot.Return(_processor);
+                _processorPool.Return(_processor);
                 _processor = null;
             }
 
-            _slot = null;
+            _processorPool = null;
             _command = null;
-            Execution = null;
+            Runner = null;
             Executor.ReturnNode(this);
         }
     }
@@ -98,8 +98,8 @@ namespace Pragma.CommandExecutor
         private readonly List<CommandNode> _running = new();
 
         private IReadOnlyList<ICommand> _commands;
-        private CommandExecuteFormat _executeFormat;
-        private int _loop;
+        private GroupMode _mode;
+        private int _repeat;
         private int _completedIterations;
         private int _cursor;
         private long _iterationTick;
@@ -109,12 +109,12 @@ namespace Pragma.CommandExecutor
         {
         }
 
-        public void Setup(CommandExecution execution, IReadOnlyList<ICommand> commands, CommandExecuteFormat executeFormat, int loop)
+        public void Setup(TreeRunner runner, IReadOnlyList<ICommand> commands, GroupMode mode, int repeat)
         {
-            Execution = execution;
+            Runner = runner;
             _commands = commands;
-            _executeFormat = executeFormat;
-            _loop = loop;
+            _mode = mode;
+            _repeat = repeat;
         }
 
         public override CommandStatus Start()
@@ -131,9 +131,9 @@ namespace Pragma.CommandExecutor
                 return StartIteration();
             }
 
-            return _executeFormat == CommandExecuteFormat.Parallel
+            return _mode == GroupMode.Parallel
                 ? TickParallel(deltaTime)
-                : TickSequence(deltaTime);
+                : TickSequential(deltaTime);
         }
 
         public override void Cancel()
@@ -156,7 +156,7 @@ namespace Pragma.CommandExecutor
             _running.Clear();
             _commands = null;
             _isRestartPending = false;
-            Execution = null;
+            Runner = null;
             Executor.ReturnNode(this);
         }
 
@@ -165,14 +165,14 @@ namespace Pragma.CommandExecutor
             _iterationTick = Executor.TickIndex;
             _cursor = 0;
 
-            if (_executeFormat == CommandExecuteFormat.Sequence)
+            if (_mode == GroupMode.Sequential)
             {
                 return AdvanceSequence();
             }
 
             for (var i = 0; i < _commands.Count; i++)
             {
-                if (Execution.IsCancelRequested)
+                if (Runner.IsCancelRequested)
                 {
                     return CommandStatus.Running;
                 }
@@ -187,7 +187,7 @@ namespace Pragma.CommandExecutor
         {
             while (_cursor < _commands.Count)
             {
-                if (Execution.IsCancelRequested)
+                if (Runner.IsCancelRequested)
                 {
                     return CommandStatus.Running;
                 }
@@ -202,7 +202,7 @@ namespace Pragma.CommandExecutor
             return CompleteIteration();
         }
 
-        private CommandStatus TickSequence(float deltaTime)
+        private CommandStatus TickSequential(float deltaTime)
         {
             if (_running.Count == 0)
             {
@@ -226,7 +226,7 @@ namespace Pragma.CommandExecutor
         {
             for (var i = 0; i < _running.Count; i++)
             {
-                if (Execution.IsCancelRequested)
+                if (Runner.IsCancelRequested)
                 {
                     return CommandStatus.Running;
                 }
@@ -248,8 +248,8 @@ namespace Pragma.CommandExecutor
 
         private CommandStatus CompleteIteration()
         {
-            // Loop: 0 — single pass, N — N extra passes, negative — endless.
-            if (_loop >= 0 && ++_completedIterations > _loop)
+            // Repeat: 0 — single pass, N — N extra passes, negative — endless.
+            if (_repeat >= 0 && ++_completedIterations > _repeat)
             {
                 return CommandStatus.Completed;
             }
@@ -268,7 +268,7 @@ namespace Pragma.CommandExecutor
 
         private CommandStatus StartChild(ICommand command)
         {
-            var node = Executor.CreateNode(command, Execution);
+            var node = Executor.CreateNode(command, Runner);
             CommandStatus status;
 
             try

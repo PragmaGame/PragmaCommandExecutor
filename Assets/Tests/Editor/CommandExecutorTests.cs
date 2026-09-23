@@ -90,7 +90,7 @@ namespace Pragma.CommandExecutor.Tests
         [Test]
         public void Parallel_StartsAll_AndWaitsForLongest()
         {
-            var handle = _executor.Execute(new List<ICommand> { Probe("a", 1), Probe("b", 3) }, CommandExecuteFormat.Parallel);
+            var handle = _executor.Execute(new List<ICommand> { Probe("a", 1), Probe("b", 3) }, GroupMode.Parallel);
 
             CollectionAssert.AreEqual(new[] { "start:a", "start:b" }, _log);
 
@@ -137,9 +137,9 @@ namespace Pragma.CommandExecutor.Tests
         }
 
         [Test]
-        public void Loop_RepeatsGroupLoopPlusOneTimes()
+        public void Repeat_RunsGroupRepeatPlusOneTimes()
         {
-            var handle = _executor.Execute(Sequence(loop: 2, Probe("p", 1)));
+            var handle = _executor.Execute(Sequence(repeat: 2, Probe("p", 1)));
 
             Tick(3);
 
@@ -148,9 +148,9 @@ namespace Pragma.CommandExecutor.Tests
         }
 
         [Test]
-        public void EndlessLoop_OfInstantCommands_RunsOncePerTick()
+        public void RepeatForever_OfInstantCommands_RunsOncePerTick()
         {
-            var handle = _executor.Execute(Sequence(loop: -1, Callback("x")));
+            var handle = _executor.Execute(Sequence(CommandGroup.RepeatForever, Callback("x")));
 
             Assert.AreEqual(1, _log.Count);
 
@@ -327,7 +327,7 @@ namespace Pragma.CommandExecutor.Tests
             var external = new CallbackCommand { Callback = () => _log.Add("external") };
             DelayCommand pooled = null;
 
-            var handle = _executor.GetBuilder(CommandExecuteFormat.Sequence)
+            var handle = _executor.GetBuilder(GroupMode.Sequential)
                 .Join<DelayCommand>(delay =>
                 {
                     delay.Duration = Frame;
@@ -441,14 +441,14 @@ namespace Pragma.CommandExecutor.Tests
             return Sequence(0, commands);
         }
 
-        private static CommandGroup Sequence(int loop, params ICommand[] commands)
+        private static CommandGroup Sequence(int repeat, params ICommand[] commands)
         {
-            return new CommandGroup(CommandExecuteFormat.Sequence, commands.ToList(), loop);
+            return new CommandGroup(GroupMode.Sequential, commands.ToList(), repeat);
         }
 
         private static CommandGroup Parallel(params ICommand[] commands)
         {
-            return new CommandGroup(CommandExecuteFormat.Parallel, commands.ToList());
+            return new CommandGroup(GroupMode.Parallel, commands.ToList());
         }
     }
 }

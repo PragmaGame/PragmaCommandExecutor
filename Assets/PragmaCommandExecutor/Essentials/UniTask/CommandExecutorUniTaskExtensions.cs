@@ -36,7 +36,7 @@ namespace Pragma.CommandExecutor
         public static UniTask Execute(
             this ICommandExecutor executor,
             IReadOnlyList<ICommand> commands,
-            CommandExecuteFormat executeFormat,
+            GroupMode mode,
             CancellationToken cancellationToken)
         {
             if (cancellationToken.IsCancellationRequested)
@@ -44,7 +44,7 @@ namespace Pragma.CommandExecutor
                 return UniTask.CompletedTask;
             }
 
-            return executor.Execute(commands, executeFormat).ToUniTask(cancellationToken);
+            return executor.Execute(commands, mode).ToUniTask(cancellationToken);
         }
 
         public static UniTask Execute<TCommand>(

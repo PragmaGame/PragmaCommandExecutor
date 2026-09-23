@@ -12,16 +12,16 @@ namespace Pragma.CommandExecutor
     /// </summary>
     public readonly struct CommandHandle
     {
-        private readonly CommandExecution _execution;
+        private readonly TreeRunner _runner;
         private readonly int _version;
 
-        internal CommandHandle(CommandExecution execution)
+        internal CommandHandle(TreeRunner runner)
         {
-            _execution = execution;
-            _version = execution.Version;
+            _runner = runner;
+            _version = runner.Version;
         }
 
-        public bool IsRunning => _execution != null && _execution.Version == _version;
+        public bool IsRunning => _runner != null && _runner.Version == _version;
 
         /// <summary>
         /// Interrupts the run. Commands that have not started yet are skipped, running processors receive
@@ -32,7 +32,7 @@ namespace Pragma.CommandExecutor
         {
             if (IsRunning)
             {
-                _execution.Cancel();
+                _runner.Cancel();
             }
         }
 
@@ -49,7 +49,7 @@ namespace Pragma.CommandExecutor
 
             if (IsRunning)
             {
-                _execution.AddListener(callback);
+                _runner.AddListener(callback);
                 return;
             }
 

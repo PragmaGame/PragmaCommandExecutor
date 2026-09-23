@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using UnityEngine;
 using UnityEngine.Pool;
 
 namespace Pragma.CommandExecutor
@@ -13,23 +12,33 @@ namespace Pragma.CommandExecutor
         private List<CommandGroup> _stack;
         private HashSet<ICommand> _externalCommands;
         
-        public CommandBuilder(ICommandExecutor executor, CommandExecuteFormat executeFormat)
+        public CommandBuilder(ICommandExecutor executor, GroupMode mode)
         {
             _executor = executor;
             _stack = ListPool<CommandGroup>.Get();
             _externalCommands = HashSetPool<ICommand>.Get();
 
             var root = executor.GetCommand<CommandGroup>();
-            root.ExecuteFormat = executeFormat;
+            root.Mode = mode;
             _root = root;
             _stack.Add(root);
         }
         
-        public CommandBuilder Join<TCommand>(Action<TCommand> command) where TCommand : ICommand, new()
+        public CommandBuilder Join<TCommand>(Action<TCommand> configure) where TCommand : ICommand, new()
         {
-            var instance = _executor.GetCommand<TCommand>();
-            command?.Invoke(instance);
-            _stack[^1].Commands.Add(instance);
+            Join(out TCommand command);
+            configure?.Invoke(command);
+            return this;
+        }
+
+        /// <summary>
+        /// Adds a pooled <typeparamref name="TCommand"/> to the current group and hands it out for configuration.
+        /// Unlike <see cref="Join{TCommand}(Action{TCommand})"/> it needs no delegate, so a closure over the values is not allocated.
+        /// </summary>
+        public CommandBuilder Join<TCommand>(out TCommand command) where TCommand : ICommand, new()
+        {
+            command = _executor.GetCommand<TCommand>();
+            _stack[^1].Commands.Add(command);
             return this;
         }
 
@@ -48,11 +57,11 @@ namespace Pragma.CommandExecutor
             return this;
         }
         
-        public CommandBuilder JointGroup(CommandExecuteFormat executeFormat, Action<CommandBuilder> builder, int loop = 0)
+        public CommandBuilder JoinGroup(GroupMode mode, Action<CommandBuilder> builder, int repeat = 0)
         {
             var group = _executor.GetCommand<CommandGroup>();
-            group.ExecuteFormat = executeFormat;
-            group.Loop = loop;
+            group.Mode = mode;
+            group.Repeat = repeat;
             _stack[^1].Commands.Add(group);
 
             _stack.Add(group);
@@ -102,54 +111,6 @@ namespace Pragma.CommandExecutor
             _externalCommands = null;
 
             return _root;
-        }
-        
-        public CommandBuilder JoinDelay(float duration)
-        {
-            var instance = _executor.GetCommand<DelayCommand>();
-
-            instance.Duration = duration;
-
-            _stack[^1].Commands.Add(instance);
-            return this;
-        }
-        
-        public CommandBuilder JoinCallback(Action callback)
-        {
-            var instance = _executor.GetCommand<CallbackCommand>();
-
-            instance.Callback = callback;
-
-            _stack[^1].Commands.Add(instance);
-            return this;
-        }
-        
-        public CommandBuilder JoinLog(string message , LogType logType)
-        {
-            var instance = _executor.GetCommand<LogCommand>();
-
-            instance.Message = message;
-            instance.LogType = logType;
-
-            _stack[^1].Commands.Add(instance);
-            return this;
-        }
-        
-        public CommandBuilder JoinScale(
-            Transform context,
-            Vector3 from,
-            Vector3 to,
-            float duration,
-            AnimationCurve curve = null)
-        {
-            var instance = _executor.GetCommand<ScaleCommand>();
-            instance.Context = context;
-            instance.From = from;
-            instance.To = to;
-            instance.Duration = duration;
-            instance.Curve = curve;
-            _stack[^1].Commands.Add(instance);
-            return this;
         }
     }
 }

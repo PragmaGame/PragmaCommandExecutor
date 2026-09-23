@@ -6,13 +6,13 @@ namespace Pragma.CommandExecutor
     public partial class CommandExecutor : ICommandExecutor, IDisposable
     {
         // Keyed by command type: one lookup per started command finds both the processor type and its pool.
-        private readonly Dictionary<Type, ProcessorSlot> _slots = new();
+        private readonly Dictionary<Type, ProcessorPool> _processorPools = new();
         private readonly IObjectFactory _defaultFactory = new ActivatorFactory();
         private readonly ITypedPool<ICommand> _commandsPool;
         private IObjectFactory _factory;
 
-        private readonly List<CommandExecution> _executions = new();
-        private readonly Stack<CommandExecution> _executionsPool = new();
+        private readonly List<TreeRunner> _runners = new();
+        private readonly Stack<TreeRunner> _runnersPool = new();
         private readonly Stack<ProcessorNode> _processorNodesPool = new();
         private readonly Stack<GroupNode> _groupNodesPool = new();
 
@@ -61,13 +61,13 @@ namespace Pragma.CommandExecutor
 
         public void AddRegistration(Type commandType, Type processorType)
         {
-            if (_slots.TryGetValue(commandType, out var slot) && slot.ProcessorType == processorType)
+            if (_processorPools.TryGetValue(commandType, out var pool) && pool.ProcessorType == processorType)
             {
                 return;
             }
 
-            // Runs that still hold a processor of the replaced registration return it to the detached slot.
-            _slots[commandType] = new ProcessorSlot(processorType);
+            // Runs that still hold a processor of the replaced registration return it to the detached pool.
+            _processorPools[commandType] = new ProcessorPool(processorType);
         }
 
         public void AddRegistration<TCommand, TProcessor>()
@@ -111,14 +111,14 @@ namespace Pragma.CommandExecutor
             return Launch(command, null, default, false, null);
         }
 
-        public CommandHandle Execute(IReadOnlyList<ICommand> commands, CommandExecuteFormat executeFormat)
+        public CommandHandle Execute(IReadOnlyList<ICommand> commands, GroupMode mode)
         {
             if (commands is null)
             {
                 throw new ArgumentNullException(nameof(commands));
             }
 
-            return Launch(null, commands, executeFormat, false, null);
+            return Launch(null, commands, mode, false, null);
         }
 
         public CommandHandle ExecuteAndRelease(ICommand command, HashSet<ICommand> excluded = null)
@@ -131,7 +131,7 @@ namespace Pragma.CommandExecutor
             return Launch(command, null, default, true, excluded);
         }
 
-        public CommandBuilder GetBuilder(CommandExecuteFormat executeFormat) => new(this, executeFormat);
+        public CommandBuilder GetBuilder(GroupMode mode) => new(this, mode);
 
         /// <summary>
         /// Cancels every running command tree and detaches the executor from the player loop.
@@ -150,9 +150,9 @@ namespace Pragma.CommandExecutor
                 CommandExecutorPlayerLoop.Unregister(this);
             }
 
-            for (var i = 0; i < _executions.Count; i++)
+            for (var i = 0; i < _runners.Count; i++)
             {
-                _executions[i].Cancel();
+                _runners[i].Cancel();
             }
 
             if (!_isTicking)
@@ -179,11 +179,11 @@ namespace Pragma.CommandExecutor
             try
             {
                 // Runs started during this tick are only started, their first Tick happens next frame.
-                var count = _executions.Count;
+                var count = _runners.Count;
 
                 for (var i = 0; i < count; i++)
                 {
-                    _executions[i].Tick(deltaTime);
+                    _runners[i].Tick(deltaTime);
                 }
             }
             finally
@@ -193,26 +193,26 @@ namespace Pragma.CommandExecutor
             }
         }
 
-        internal ProcessorSlot GetProcessorSlot(ICommand command)
+        internal ProcessorPool GetProcessorPool(ICommand command)
         {
             var commandType = command.GetType();
 
-            if (!_slots.TryGetValue(commandType, out var slot))
+            if (!_processorPools.TryGetValue(commandType, out var pool))
             {
                 throw new ArgumentException($"Command processor for type '{commandType}' not found");
             }
 
-            return slot;
+            return pool;
         }
 
-        internal ICommandProcessor RentProcessor(ProcessorSlot slot)
+        internal ICommandProcessor RentProcessor(ProcessorPool pool)
         {
-            if (slot.TryRent(out var processor))
+            if (pool.TryRent(out var processor))
             {
                 return processor;
             }
 
-            var processorType = slot.ProcessorType;
+            var processorType = pool.ProcessorType;
 
             if (!(_factory.TryCreate(processorType, out var instance) || _defaultFactory.TryCreate(processorType, out instance))
                 || instance is not ICommandProcessor created)
@@ -220,11 +220,11 @@ namespace Pragma.CommandExecutor
                 throw new InvalidOperationException($"Command processor '{processorType}' cannot be created");
             }
 
-            slot.OnCreated(created);
+            pool.OnCreated(created);
             return created;
         }
 
-        internal CommandNode CreateNode(ICommand command, CommandExecution execution)
+        internal CommandNode CreateNode(ICommand command, TreeRunner runner)
         {
             if (command is null)
             {
@@ -233,22 +233,22 @@ namespace Pragma.CommandExecutor
 
             if (command is CommandGroup group)
             {
-                return CreateGroupNode(group.Commands, group.ExecuteFormat, group.Loop, execution);
+                return CreateGroupNode(group.Commands, group.Mode, group.Repeat, runner);
             }
 
             var node = _processorNodesPool.Count > 0 ? _processorNodesPool.Pop() : new ProcessorNode(this);
-            node.Setup(execution, command);
+            node.Setup(runner, command);
             return node;
         }
 
         internal GroupNode CreateGroupNode(
             IReadOnlyList<ICommand> commands,
-            CommandExecuteFormat executeFormat,
-            int loop,
-            CommandExecution execution)
+            GroupMode mode,
+            int repeat,
+            TreeRunner runner)
         {
             var node = _groupNodesPool.Count > 0 ? _groupNodesPool.Pop() : new GroupNode(this);
-            node.Setup(execution, commands, executeFormat, loop);
+            node.Setup(runner, commands, mode, repeat);
             return node;
         }
 
@@ -265,7 +265,7 @@ namespace Pragma.CommandExecutor
         private CommandHandle Launch(
             ICommand command,
             IReadOnlyList<ICommand> commands,
-            CommandExecuteFormat executeFormat,
+            GroupMode mode,
             bool releaseCommand,
             HashSet<ICommand> excluded)
         {
@@ -274,45 +274,45 @@ namespace Pragma.CommandExecutor
                 throw new ObjectDisposedException(nameof(CommandExecutor));
             }
 
-            var execution = _executionsPool.Count > 0 ? _executionsPool.Pop() : new CommandExecution(this);
+            var runner = _runnersPool.Count > 0 ? _runnersPool.Pop() : new TreeRunner(this);
 
             // Starts synchronously: instant commands at the head of the tree run inside this call.
-            execution.Start(command, commands, executeFormat, releaseCommand, excluded);
+            runner.Start(command, commands, mode, releaseCommand, excluded);
 
             // The executor was disposed by one of the commands that just ran.
             if (_isDisposed)
             {
-                execution.Cancel();
+                runner.Cancel();
             }
 
-            if (execution.IsFinished)
+            if (runner.IsFinished)
             {
-                _executionsPool.Push(execution);
+                _runnersPool.Push(runner);
                 return default;
             }
 
-            _executions.Add(execution);
-            return new CommandHandle(execution);
+            _runners.Add(runner);
+            return new CommandHandle(runner);
         }
 
         private void RecycleFinished()
         {
             var write = 0;
 
-            for (var read = 0; read < _executions.Count; read++)
+            for (var read = 0; read < _runners.Count; read++)
             {
-                var execution = _executions[read];
+                var runner = _runners[read];
 
-                if (execution.IsFinished)
+                if (runner.IsFinished)
                 {
-                    _executionsPool.Push(execution);
+                    _runnersPool.Push(runner);
                     continue;
                 }
 
-                _executions[write++] = execution;
+                _runners[write++] = runner;
             }
 
-            _executions.RemoveRange(write, _executions.Count - write);
+            _runners.RemoveRange(write, _runners.Count - write);
         }
     }
 }
