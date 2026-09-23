@@ -8,8 +8,9 @@ namespace Pragma.CommandExecutor
         // Keyed by command type: one lookup per started command finds both the processor type and its pool.
         private readonly Dictionary<Type, ProcessorPool> _processorPools = new();
         private readonly IObjectFactory _defaultFactory = new ActivatorFactory();
-        private readonly ITypedPool<ICommand> _commandsPool;
         private IObjectFactory _factory;
+
+        private readonly Dictionary<Type, Stack<ICommand>> _commandPools = new();
 
         private readonly List<TreeRunner> _runners = new();
         private readonly Stack<TreeRunner> _runnersPool = new();
@@ -33,7 +34,6 @@ namespace Pragma.CommandExecutor
         internal CommandExecutor(IObjectFactory factory, IEnumerable<ICommandRegistrationContext> registrationContexts, bool autoTick)
         {
             _factory = factory ?? _defaultFactory;
-            _commandsPool = new TypedPool<ICommand>(null);
 
             if (registrationContexts != null)
             {
@@ -77,9 +77,14 @@ namespace Pragma.CommandExecutor
             AddRegistration(typeof(TCommand), typeof(TProcessor));
         }
 
-        public TCommand GetCommand<TCommand>() where TCommand : ICommand
+        public TCommand RentCommand<TCommand>() where TCommand : ICommand, new()
         {
-            return _commandsPool.Get<TCommand>();
+            if (_commandPools.TryGetValue(typeof(TCommand), out var pool) && pool.TryPop(out var command))
+            {
+                return (TCommand)command;
+            }
+
+            return new TCommand();
         }
 
         public void ReleaseCommand(ICommand command, HashSet<ICommand> excluded = null)
@@ -98,7 +103,16 @@ namespace Pragma.CommandExecutor
             }
 
             command.Reset();
-            _commandsPool.Release(command);
+
+            var commandType = command.GetType();
+
+            if (!_commandPools.TryGetValue(commandType, out var pool))
+            {
+                pool = new Stack<ICommand>();
+                _commandPools[commandType] = pool;
+            }
+
+            pool.Push(command);
         }
 
         public CommandHandle Execute(ICommand command)
@@ -252,12 +266,12 @@ namespace Pragma.CommandExecutor
             return node;
         }
 
-        internal void ReturnNode(ProcessorNode node)
+        internal void ReleaseNode(ProcessorNode node)
         {
             _processorNodesPool.Push(node);
         }
 
-        internal void ReturnNode(GroupNode node)
+        internal void ReleaseNode(GroupNode node)
         {
             _groupNodesPool.Push(node);
         }

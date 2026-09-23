@@ -20,7 +20,16 @@ namespace Pragma.CommandExecutor
         /// </summary>
         public CommandHandle ExecuteAndRelease(ICommand command, HashSet<ICommand> excluded = null);
 
-        public TCommand GetCommand<TCommand>() where TCommand : ICommand;
+        /// <summary>
+        /// Takes a command from the pool, or creates one if the pool is empty.
+        /// Give it back with <see cref="ReleaseCommand"/>, or start it with <see cref="ExecuteAndRelease"/>.
+        /// </summary>
+        public TCommand RentCommand<TCommand>() where TCommand : ICommand, new();
+
+        /// <summary>
+        /// Resets <paramref name="command"/> and returns it to the pool; for a group, its children too,
+        /// except those in <paramref name="excluded"/>.
+        /// </summary>
         public void ReleaseCommand(ICommand command, HashSet<ICommand> excluded = null);
         public CommandBuilder GetBuilder(GroupMode mode);
     }

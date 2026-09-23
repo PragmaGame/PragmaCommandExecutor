@@ -18,7 +18,7 @@ namespace Pragma.CommandExecutor
             _stack = ListPool<CommandGroup>.Get();
             _externalCommands = HashSetPool<ICommand>.Get();
 
-            var root = executor.GetCommand<CommandGroup>();
+            var root = executor.RentCommand<CommandGroup>();
             root.Mode = mode;
             _root = root;
             _stack.Add(root);
@@ -37,7 +37,7 @@ namespace Pragma.CommandExecutor
         /// </summary>
         public CommandBuilder Join<TCommand>(out TCommand command) where TCommand : ICommand, new()
         {
-            command = _executor.GetCommand<TCommand>();
+            command = _executor.RentCommand<TCommand>();
             _stack[^1].Commands.Add(command);
             return this;
         }
@@ -59,7 +59,7 @@ namespace Pragma.CommandExecutor
         
         public CommandBuilder JoinGroup(GroupMode mode, Action<CommandBuilder> builder, int repeat = 0)
         {
-            var group = _executor.GetCommand<CommandGroup>();
+            var group = _executor.RentCommand<CommandGroup>();
             group.Mode = mode;
             group.Repeat = repeat;
             _stack[^1].Commands.Add(group);

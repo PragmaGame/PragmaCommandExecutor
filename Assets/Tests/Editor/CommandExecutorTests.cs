@@ -150,7 +150,7 @@ namespace Pragma.CommandExecutor.Tests
         [Test]
         public void RepeatForever_OfInstantCommands_RunsOncePerTick()
         {
-            var handle = _executor.Execute(Sequence(CommandGroup.RepeatForever, Callback("x")));
+            var handle = _executor.Execute(Sequence(CommandGroup.REPEAT_FOREVER, Callback("x")));
 
             Assert.AreEqual(1, _log.Count);
 
@@ -342,7 +342,7 @@ namespace Pragma.CommandExecutor.Tests
             CollectionAssert.AreEqual(new[] { "external" }, _log);
             Assert.AreEqual(0f, pooled.Duration);
             Assert.IsNotNull(external.Callback);
-            Assert.AreSame(pooled, _executor.GetCommand<DelayCommand>());
+            Assert.AreSame(pooled, _executor.RentCommand<DelayCommand>());
         }
 
         [Test]
@@ -358,7 +358,7 @@ namespace Pragma.CommandExecutor.Tests
             });
 
             Assert.AreEqual(string.Empty, pooled.Message);
-            Assert.AreSame(pooled, _executor.GetCommand<LogCommand>());
+            Assert.AreSame(pooled, _executor.RentCommand<LogCommand>());
         }
 
         [Test]

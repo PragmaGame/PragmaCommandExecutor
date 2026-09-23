@@ -7,12 +7,12 @@ namespace Pragma.CommandExecutor
     [Serializable]
     public class CommandGroup : ICommand
     {
-        public const int RepeatForever = -1;
+        public const int REPEAT_FOREVER = -1;
 
         [field: SerializeField] public GroupMode Mode { get; set; }
 
         /// <summary>
-        /// How many times the group runs again after the first pass. Any negative value (<see cref="RepeatForever"/>)
+        /// How many times the group runs again after the first pass. Any negative value (<see cref="REPEAT_FOREVER"/>)
         /// repeats until the run is cancelled.
         /// </summary>
         [field: SerializeField] public int Repeat { get; set; } = 0;

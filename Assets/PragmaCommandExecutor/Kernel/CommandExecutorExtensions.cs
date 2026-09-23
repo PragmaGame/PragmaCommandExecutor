@@ -9,9 +9,9 @@ namespace Pragma.CommandExecutor
         /// The command returns to the pool when the run finishes.
         /// </summary>
         public static CommandHandle Execute<TCommand>(this ICommandExecutor executor, Action<TCommand> configure)
-            where TCommand : ICommand
+            where TCommand : ICommand, new()
         {
-            var command = executor.GetCommand<TCommand>();
+            var command = executor.RentCommand<TCommand>();
             configure?.Invoke(command);
             return executor.ExecuteAndRelease(command);
         }

@@ -81,14 +81,14 @@ namespace Pragma.CommandExecutor
                     Debug.LogException(exception);
                 }
 
-                _processorPool.Return(_processor);
+                _processorPool.Release(_processor);
                 _processor = null;
             }
 
             _processorPool = null;
             _command = null;
             Runner = null;
-            Executor.ReturnNode(this);
+            Executor.ReleaseNode(this);
         }
     }
 
@@ -157,7 +157,7 @@ namespace Pragma.CommandExecutor
             _commands = null;
             _isRestartPending = false;
             Runner = null;
-            Executor.ReturnNode(this);
+            Executor.ReleaseNode(this);
         }
 
         private CommandStatus StartIteration()

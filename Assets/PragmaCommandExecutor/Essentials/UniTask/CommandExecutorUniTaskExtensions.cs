@@ -51,7 +51,7 @@ namespace Pragma.CommandExecutor
             this ICommandExecutor executor,
             Action<TCommand> builder,
             CancellationToken cancellationToken)
-            where TCommand : ICommand
+            where TCommand : ICommand, new()
         {
             if (cancellationToken.IsCancellationRequested)
             {

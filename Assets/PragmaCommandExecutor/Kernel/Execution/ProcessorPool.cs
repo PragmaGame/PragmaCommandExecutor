@@ -33,7 +33,7 @@ namespace Pragma.CommandExecutor
             }
         }
 
-        public void Return(ICommandProcessor processor)
+        public void Release(ICommandProcessor processor)
         {
             if (!ReferenceEquals(processor, _shared))
             {
