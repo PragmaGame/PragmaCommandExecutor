@@ -1,14 +1,19 @@
 {
-    "name": "Pragma.CommandExecutor",
+    "name": "Pragma.CommandExecutor.UniTask",
     "rootNamespace": "Pragma.CommandExecutor",
-    "references": [],
+    "references": [
+        "GUID:0eeff6a479551d4459704cf6f5d5ad5a",
+        "GUID:f51ebe6a0ceec4240a699833d6309b23"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": [],
+    "defineConstraints": [
+        "PRAGMA_COMMAND_EXECUTOR_UNITASK_SUPPORT"
+    ],
     "versionDefines": [],
     "noEngineReferences": false
 }

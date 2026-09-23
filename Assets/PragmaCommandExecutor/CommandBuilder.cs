@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Threading;
-using Codice.CM.Common;
-using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Pool;
 
@@ -68,27 +65,21 @@ namespace Pragma.CommandExecutor
         }
 
         /// <summary>
-        /// Plays the built command tree and releases all pooled commands when finished.
+        /// Starts the built command tree. Pooled commands are released when the run finishes
+        /// (completed, cancelled or faulted); commands added via <see cref="Join(ICommand)"/> are left untouched.
         /// </summary>
-        /// <param name="token">Optional cancellation token used to interrupt command.</param>
-        public async UniTask Execute(CancellationToken token = default)
+        public CommandHandle Execute()
         {
-            var root = _root;
-            var executor = _executor;
-            var externalCommands = _externalCommands;
-
-            ListPool<CommandGroup>.Release(_stack);
-            _stack = null;
-            _externalCommands = null;
-
             try
             {
-                await executor.Execute(root, token);
+                return _executor.ExecuteAndRelease(_root, _externalCommands);
             }
             finally
             {
-                executor.ReleaseCommand(root, externalCommands);
-                HashSetPool<ICommand>.Release(externalCommands);
+                ListPool<CommandGroup>.Release(_stack);
+                HashSetPool<ICommand>.Release(_externalCommands);
+                _stack = null;
+                _externalCommands = null;
             }
         }
 
@@ -96,7 +87,7 @@ namespace Pragma.CommandExecutor
         /// Builds and returns the root <see cref="ICommand"/> without playing it.
         /// <para>
         /// The caller is <b>responsible</b> for releasing the command tree by calling
-        /// <c>service.ReleaseFeedback(feedback, excluded)</c> when it is no longer needed.
+        /// <c>executor.ReleaseCommand(root, excluded)</c> when it is no longer needed.
         /// Commands added via <see cref="Join(ICommand)"/> will <b>not</b> be released
         /// automatically — their lifecycle remains the caller's responsibility.
         /// </para>

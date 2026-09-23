@@ -8,7 +8,7 @@ namespace Pragma.CommandExecutor
 {
     public partial class CommandExecutor
     {
-        private static ICommandExecutor _singleton;
+        private static CommandExecutor _singleton;
         
         public static ICommandExecutor Singleton
         {
@@ -23,9 +23,13 @@ namespace Pragma.CommandExecutor
             }
         }
         
-        private static ICommandExecutor Create()
+        private static CommandExecutor Create()
         {
-            var executor = new CommandExecutor(null);
+            var executor = new CommandExecutor(null, new ICommandRegistrationContext[]
+            {
+                new DefaultCommandRegistrationContext(),
+            });
+
             return executor;
         }
 
@@ -40,6 +44,7 @@ namespace Pragma.CommandExecutor
         {
             if (state is PlayModeStateChange.ExitingPlayMode)
             {
+                _singleton?.Dispose();
                 _singleton = null;
             }
         }

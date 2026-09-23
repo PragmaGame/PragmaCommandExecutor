@@ -1,23 +1,29 @@
-﻿using System;
-using System.Threading;
-using Cysharp.Threading.Tasks;
-
-namespace Pragma.CommandExecutor
+﻿namespace Pragma.CommandExecutor
 {
     public class DelayCommandProcessor : ICommandProcessor<DelayCommand>
     {
+        private float _remaining;
+
         [UnityEngine.Scripting.RequiredMember]
         public DelayCommandProcessor()
         {
         }
-        
-        public void Shutdown()
+
+        public CommandStatus Start(DelayCommand command)
         {
+            _remaining = command.Duration;
+            return _remaining > 0f ? CommandStatus.Running : CommandStatus.Completed;
         }
 
-        public UniTask Execute(DelayCommand command, CancellationToken cancellationToken = default)
+        public CommandStatus Tick(float deltaTime)
         {
-            return UniTask.Delay(TimeSpan.FromSeconds(command.Duration), cancellationToken: cancellationToken);
+            _remaining -= deltaTime;
+            return _remaining > 0f ? CommandStatus.Running : CommandStatus.Completed;
+        }
+
+        public void Shutdown()
+        {
+            _remaining = 0f;
         }
     }
 }

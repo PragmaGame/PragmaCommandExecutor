@@ -1,25 +1,16 @@
-﻿using System.Threading;
-using Cysharp.Threading.Tasks;
-
-namespace Pragma.CommandExecutor
+﻿namespace Pragma.CommandExecutor
 {
     public class CallbackCommandProcessor : ICommandProcessor<CallbackCommand>
     {
         [UnityEngine.Scripting.RequiredMember]
-        CallbackCommandProcessor()
+        public CallbackCommandProcessor()
         {
-        }
-        
-        
-        public void Shutdown()
-        {
-            
         }
 
-        public UniTask Execute(CallbackCommand command, CancellationToken cancellationToken = default)
+        public CommandStatus Start(CallbackCommand command)
         {
-            command?.Callback();
-            return UniTask.CompletedTask;
+            command.Callback?.Invoke();
+            return CommandStatus.Completed;
         }
     }
 }
