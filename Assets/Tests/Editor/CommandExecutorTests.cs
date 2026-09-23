@@ -12,7 +12,7 @@ namespace Pragma.CommandExecutor.Tests
     public class CommandExecutorTests
     {
         // Exactly representable in binary, so accumulated delays never drift.
-        private const float Frame = 0.25f;
+        private const float FRAME = 0.25f;
 
         private CommandExecutor _executor;
         private List<string> _log;
@@ -55,7 +55,7 @@ namespace Pragma.CommandExecutor.Tests
             CollectionAssert.AreEqual(new[] { "a", "start:p" }, _log);
 
             Tick();
-            CollectionAssert.AreEqual(new[] { "a", "start:p", "end:p", "shutdown:p", "b" }, _log);
+            CollectionAssert.AreEqual(new[] { "a", "start:p", "end:p", "cleanup:p", "b" }, _log);
             Assert.IsFalse(handle.IsRunning);
         }
 
@@ -84,7 +84,7 @@ namespace Pragma.CommandExecutor.Tests
 
             CommandResult? result = null;
             handle.OnFinished(r => result = r);
-            Assert.AreEqual(CommandOutcome.Completed, result?.Outcome);
+            Assert.AreEqual(CommandResult.Completed, result);
         }
 
         [Test]
@@ -165,7 +165,7 @@ namespace Pragma.CommandExecutor.Tests
         [Test]
         public void Delay_CompletesAfterDuration()
         {
-            var handle = _executor.Execute(Sequence(new DelayCommand { Duration = Frame * 2 }, Callback("done")));
+            var handle = _executor.Execute(Sequence(new DelayCommand { Duration = FRAME * 2 }, Callback("done")));
 
             Tick();
             Assert.IsEmpty(_log);
@@ -258,12 +258,25 @@ namespace Pragma.CommandExecutor.Tests
             Tick();
             handle.Cancel();
 
-            CollectionAssert.AreEqual(new[] { "start:p", "cancel:p", "shutdown:p" }, _log);
-            Assert.AreEqual(CommandOutcome.Cancelled, result?.Outcome);
+            CollectionAssert.AreEqual(new[] { "start:p", "interrupt:p" }, _log);
+            Assert.AreEqual(CommandResult.Cancelled, result);
             Assert.IsFalse(handle.IsRunning);
 
             Tick(3);
             Assert.IsFalse(_log.Contains("never"));
+        }
+
+        [Test]
+        public void Cancel_InterruptsOnlyRunningProcessors()
+        {
+            var handle = _executor.Execute(Sequence(Probe("done", 1), Probe("running", 5)));
+
+            Tick();
+            handle.Cancel();
+
+            Assert.Contains("cleanup:done", _log);
+            Assert.Contains("interrupt:running", _log);
+            Assert.IsFalse(_log.Contains("interrupt:done"));
         }
 
         [Test]
@@ -284,12 +297,12 @@ namespace Pragma.CommandExecutor.Tests
 
             Assert.IsFalse(_log.Contains("never"));
             Assert.IsFalse(_log.Contains("start:q"));
-            Assert.AreEqual(CommandOutcome.Cancelled, result?.Outcome);
+            Assert.AreEqual(CommandResult.Cancelled, result);
             Assert.IsFalse(handle.IsRunning);
         }
 
         [Test]
-        public void Exception_FaultsRun_AndCancelsSiblings()
+        public void Exception_FaultsRun_AndInterruptsSiblings()
         {
             var boom = Probe("boom", 1);
             boom.ThrowOnTick = true;
@@ -298,18 +311,17 @@ namespace Pragma.CommandExecutor.Tests
             CommandResult? result = null;
             handle.OnFinished(r => result = r);
 
+            LogAssert.Expect(LogType.Exception, new Regex("boom"));
             Tick();
 
-            Assert.AreEqual(CommandOutcome.Faulted, result?.Outcome);
-            Assert.IsInstanceOf<InvalidOperationException>(result?.Exception);
-            Assert.Contains("cancel:slow", _log);
-            Assert.Contains("shutdown:slow", _log);
-            Assert.Contains("shutdown:boom", _log);
+            Assert.AreEqual(CommandResult.Faulted, result);
+            Assert.Contains("interrupt:slow", _log);
+            Assert.Contains("interrupt:boom", _log);
             Assert.IsFalse(handle.IsRunning);
         }
 
         [Test]
-        public void Exception_WithoutListeners_IsLogged()
+        public void Exception_OnStart_IsLogged_AndFinishesRun()
         {
             var boom = Probe("boom", 1);
             boom.ThrowOnStart = true;
@@ -330,7 +342,7 @@ namespace Pragma.CommandExecutor.Tests
             var handle = _executor.GetBuilder(GroupMode.Sequential)
                 .Join<DelayCommand>(delay =>
                 {
-                    delay.Duration = Frame;
+                    delay.Duration = FRAME;
                     pooled = delay;
                 })
                 .Join(external)
@@ -374,7 +386,7 @@ namespace Pragma.CommandExecutor.Tests
 
             first.Cancel();
             Assert.IsTrue(second.IsRunning);
-            Assert.IsFalse(_log.Contains("cancel:b"));
+            Assert.IsFalse(_log.Contains("interrupt:b"));
         }
 
         [Test]
@@ -385,7 +397,7 @@ namespace Pragma.CommandExecutor.Tests
             _executor.Dispose();
 
             Assert.IsFalse(handle.IsRunning);
-            Assert.Contains("cancel:p", _log);
+            Assert.Contains("interrupt:p", _log);
             Assert.Throws<ObjectDisposedException>(() => _executor.Execute(Probe("q", 1)));
         }
 
@@ -398,7 +410,7 @@ namespace Pragma.CommandExecutor.Tests
         {
             for (var i = 0; i < frames; i++)
             {
-                _executor.Tick(Frame);
+                _executor.Tick(FRAME);
             }
         }
 
@@ -424,7 +436,7 @@ namespace Pragma.CommandExecutor.Tests
                 Context = transform,
                 From = Vector3.zero,
                 To = Vector3.one,
-                Duration = Frame * 2,
+                Duration = FRAME * 2,
                 Curve = curve,
             };
         }

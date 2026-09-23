@@ -25,13 +25,13 @@ namespace Pragma.CommandExecutor
             return Poll();
         }
 
-        public void Cancel()
+        public void Cleanup(bool interrupted)
         {
-            _cancellation?.Cancel();
-        }
+            if (interrupted)
+            {
+                _cancellation?.Cancel();
+            }
 
-        public void Shutdown()
-        {
             _task = default;
 
             // A source that was never cancelled is reused by the next run of this pooled processor.

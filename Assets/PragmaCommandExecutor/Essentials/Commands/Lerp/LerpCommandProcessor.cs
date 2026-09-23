@@ -18,27 +18,13 @@ namespace Pragma.CommandExecutor
             var curve = command.Curve;
             _curve = curve != null && curve.length > 0 ? curve : null;
 
-            return Evaluate();
+            return Tick(0f);
         }
 
         public CommandStatus Tick(float deltaTime)
         {
             _elapsed += deltaTime;
-            return Evaluate();
-        }
 
-        public void Shutdown()
-        {
-            _command = default;
-            _curve = null;
-            _elapsed = 0f;
-        }
-
-        protected abstract TValue Lerp(TValue from, TValue to, float t);
-        protected abstract void Apply(Transform context, TValue value);
-
-        private CommandStatus Evaluate()
-        {
             var context = _command.Context;
 
             if (context == null)
@@ -53,5 +39,15 @@ namespace Pragma.CommandExecutor
 
             return progress < 1f ? CommandStatus.Running : CommandStatus.Completed;
         }
+
+        public void Cleanup(bool interrupted)
+        {
+            // Both belong to the command, which goes back to its own pool.
+            _command = default;
+            _curve = null;
+        }
+
+        protected abstract TValue Lerp(TValue from, TValue to, float t);
+        protected abstract void Apply(Transform context, TValue value);
     }
 }

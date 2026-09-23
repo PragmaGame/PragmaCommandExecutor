@@ -6,7 +6,8 @@ namespace Pragma.CommandExecutor
 {
     /// <summary>
     /// Pooled <see cref="IUniTaskSource"/> completed by a <see cref="CommandHandle"/>.
-    /// Cancellation of the run completes the task normally (it is suppressed, as before), a faulted run rethrows.
+    /// Cancellation of the run completes the task normally (it is suppressed), a faulted run rethrows its exception,
+    /// which the executor then does not log.
     /// </summary>
     internal sealed class CommandHandlePromise : IUniTaskSource, ITaskPoolNode<CommandHandlePromise>
     {
@@ -14,7 +15,7 @@ namespace Pragma.CommandExecutor
 
         private static readonly Action<object> CancelCallback = state => ((CommandHandlePromise)state)._handle.Cancel();
 
-        private readonly Action<CommandResult> _onFinished;
+        private readonly Action<CommandResult, Exception> _onFinished;
 
         private CommandHandlePromise _nextNode;
         private UniTaskCompletionSourceCore<AsyncUnit> _core;
@@ -86,13 +87,13 @@ namespace Pragma.CommandExecutor
             }
         }
 
-        private void OnFinished(CommandResult result)
+        private void OnFinished(CommandResult result, Exception exception)
         {
             _registration.Dispose();
 
-            if (result.IsFaulted)
+            if (result == CommandResult.Faulted)
             {
-                _core.TrySetException(result.Exception);
+                _core.TrySetException(exception);
                 return;
             }
 

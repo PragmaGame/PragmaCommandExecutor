@@ -7,7 +7,7 @@ namespace Pragma.CommandExecutor
     public class LogCommand : ICommand
     {
         [field: SerializeField] public string Message { get; set; }
-        [field: SerializeField] public LogType LogType { get; set; }
+        [field: SerializeField] public LogType LogType { get; set; } = LogType.Log;
 
         public void Reset()
         {

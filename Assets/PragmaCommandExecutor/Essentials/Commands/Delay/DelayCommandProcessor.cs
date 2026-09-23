@@ -12,7 +12,7 @@
         public CommandStatus Start(DelayCommand command)
         {
             _remaining = command.Duration;
-            return _remaining > 0f ? CommandStatus.Running : CommandStatus.Completed;
+            return Tick(0f);
         }
 
         public CommandStatus Tick(float deltaTime)
@@ -21,7 +21,7 @@
             return _remaining > 0f ? CommandStatus.Running : CommandStatus.Completed;
         }
 
-        public void Shutdown()
+        public void Cleanup(bool interrupted)
         {
             _remaining = 0f;
         }

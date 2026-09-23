@@ -25,8 +25,8 @@ namespace Pragma.CommandExecutor
 
         /// <summary>
         /// Interrupts the run. Commands that have not started yet are skipped, running processors receive
-        /// <see cref="ICommandProcessor.Cancel"/>. When called from inside the run itself (e.g. from a callback command)
-        /// the run stops as soon as the current step returns.
+        /// <see cref="ICommandProcessor.Cleanup"/> with <c>interrupted = true</c>. When called from inside the run itself
+        /// (e.g. from a callback command) the run stops as soon as the current step returns.
         /// </summary>
         public void Cancel()
         {
@@ -54,6 +54,27 @@ namespace Pragma.CommandExecutor
             }
 
             callback(CommandResult.Completed);
+        }
+
+        /// <summary>
+        /// Same as <see cref="OnFinished(Action{CommandResult})"/>, but also receives the exception of a faulted run.
+        /// The listener takes over reporting it, so the executor no longer logs it: the UniTask integration rethrows it
+        /// from <c>await</c> instead.
+        /// </summary>
+        internal void OnFinished(Action<CommandResult, Exception> callback)
+        {
+            if (callback == null)
+            {
+                throw new ArgumentNullException(nameof(callback));
+            }
+
+            if (IsRunning)
+            {
+                _runner.AddListener(callback);
+                return;
+            }
+
+            callback(CommandResult.Completed, null);
         }
     }
 }

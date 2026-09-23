@@ -3,6 +3,9 @@
     "rootNamespace": "Pragma.CommandExecutor.Tests",
     "references": [
         "Pragma.CommandExecutor",
+        "Pragma.CommandExecutor.UniTask",
+        "UniTask",
+        "Unity.PerformanceTesting",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

@@ -13,6 +13,7 @@ namespace Pragma.CommandExecutor
     {
         private readonly CommandExecutor _executor;
         private readonly List<Action<CommandResult>> _listeners = new();
+        private readonly List<Action<CommandResult, Exception>> _exceptionListeners = new();
         private readonly HashSet<ICommand> _excluded = new();
 
         private ICommand _command;
@@ -44,7 +45,11 @@ namespace Pragma.CommandExecutor
 
             if (excluded != null)
             {
-                _excluded.UnionWith(excluded);
+                // Not UnionWith: it takes an IEnumerable<T>, and Unity's Mono boxes the enumerator on every call.
+                foreach (var excludedCommand in excluded)
+                {
+                    _excluded.Add(excludedCommand);
+                }
             }
 
             _isProcessing = true;
@@ -109,8 +114,7 @@ namespace Pragma.CommandExecutor
                 return;
             }
 
-            Interrupt();
-            Finish(CommandResult.Cancelled);
+            Finish(CommandResult.Cancelled, isRootRunning: true);
         }
 
         public void AddListener(Action<CommandResult> listener)
@@ -118,38 +122,37 @@ namespace Pragma.CommandExecutor
             _listeners.Add(listener);
         }
 
+        public void AddListener(Action<CommandResult, Exception> listener)
+        {
+            _exceptionListeners.Add(listener);
+        }
+
         private void OnStep(CommandStatus status)
         {
             if (IsCancelRequested)
             {
-                Interrupt();
-                Finish(CommandResult.Cancelled);
+                // The root may have completed in the very step that requested the cancellation.
+                Finish(CommandResult.Cancelled, status == CommandStatus.Running);
             }
             else if (status == CommandStatus.Completed)
             {
-                Finish(CommandResult.Completed);
+                Finish(CommandResult.Completed, isRootRunning: false);
             }
         }
 
         private void Fault(Exception exception)
         {
-            Interrupt();
-            Finish(CommandResult.Faulted(exception));
+            Finish(CommandResult.Faulted, isRootRunning: true, exception);
         }
 
-        private void Interrupt()
-        {
-            _root?.Cancel();
-        }
-
-        private void Finish(CommandResult result)
+        private void Finish(CommandResult result, bool isRootRunning, Exception exception = null)
         {
             IsFinished = true;
             Version++;
 
             try
             {
-                _root?.Release();
+                _root?.Release(interrupted: isRootRunning);
 
                 if (_releaseCommand)
                 {
@@ -157,9 +160,9 @@ namespace Pragma.CommandExecutor
                     _executor.ReleaseCommand(_command, _excluded.Count > 0 ? _excluded : null);
                 }
             }
-            catch (Exception exception)
+            catch (Exception releaseException)
             {
-                Debug.LogException(exception);
+                Debug.LogException(releaseException);
             }
             finally
             {
@@ -169,35 +172,44 @@ namespace Pragma.CommandExecutor
                 _excluded.Clear();
             }
 
-            Notify(result);
+            Notify(result, exception);
         }
 
-        private void Notify(CommandResult result)
+        private void Notify(CommandResult result, Exception exception)
         {
-            if (_listeners.Count == 0)
+            // A fault is reported exactly once: by a listener that takes the exception over, or here.
+            if (exception != null && _exceptionListeners.Count == 0)
             {
-                if (result.IsFaulted)
-                {
-                    Debug.LogException(result.Exception);
-                }
-
-                return;
+                Debug.LogException(exception);
             }
 
-            // The handle is already stale here, so listeners cannot append to this list while it is iterated.
+            // The handle is already stale here, so listeners cannot append to these lists while they are iterated.
             for (var i = 0; i < _listeners.Count; i++)
             {
                 try
                 {
                     _listeners[i](result);
                 }
-                catch (Exception exception)
+                catch (Exception listenerException)
                 {
-                    Debug.LogException(exception);
+                    Debug.LogException(listenerException);
+                }
+            }
+
+            for (var i = 0; i < _exceptionListeners.Count; i++)
+            {
+                try
+                {
+                    _exceptionListeners[i](result, exception);
+                }
+                catch (Exception listenerException)
+                {
+                    Debug.LogException(listenerException);
                 }
             }
 
             _listeners.Clear();
+            _exceptionListeners.Clear();
         }
     }
 }

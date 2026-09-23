@@ -21,11 +21,11 @@ namespace Pragma.CommandExecutor
         public abstract CommandStatus Start();
         public abstract CommandStatus Tick(float deltaTime);
 
-        /// <summary>Interrupts running work. Never throws.</summary>
-        public abstract void Cancel();
-
-        /// <summary>Returns the node (and whatever it still holds) to the pools. Never throws.</summary>
-        public abstract void Release();
+        /// <summary>
+        /// Returns the node (and whatever it still holds) to the pools. <paramref name="interrupted"/> is true when the run
+        /// is torn down while this node is still running. Never throws.
+        /// </summary>
+        public abstract void Release(bool interrupted);
     }
 
     internal sealed class ProcessorNode : CommandNode
@@ -56,25 +56,13 @@ namespace Pragma.CommandExecutor
             return _processor.Tick(deltaTime);
         }
 
-        public override void Cancel()
-        {
-            try
-            {
-                _processor?.Cancel();
-            }
-            catch (Exception exception)
-            {
-                Debug.LogException(exception);
-            }
-        }
-
-        public override void Release()
+        public override void Release(bool interrupted)
         {
             if (_processor != null)
             {
                 try
                 {
-                    _processor.Shutdown();
+                    _processor.Cleanup(interrupted);
                 }
                 catch (Exception exception)
                 {
@@ -136,21 +124,12 @@ namespace Pragma.CommandExecutor
                 : TickSequential(deltaTime);
         }
 
-        public override void Cancel()
+        public override void Release(bool interrupted)
         {
-            _isRestartPending = false;
-
+            // Only children that are still running are left here: finished ones were released as they completed.
             for (var i = 0; i < _running.Count; i++)
             {
-                _running[i].Cancel();
-            }
-        }
-
-        public override void Release()
-        {
-            for (var i = 0; i < _running.Count; i++)
-            {
-                _running[i].Release();
+                _running[i].Release(interrupted);
             }
 
             _running.Clear();
@@ -217,7 +196,7 @@ namespace Pragma.CommandExecutor
             }
 
             _running.Clear();
-            child.Release();
+            child.Release(false);
 
             return AdvanceSequence();
         }
@@ -240,7 +219,7 @@ namespace Pragma.CommandExecutor
 
                 // Removed before release so that a throwing sibling never leaves a released node in the list.
                 _running.RemoveAt(i--);
-                child.Release();
+                child.Release(false);
             }
 
             return _running.Count == 0 ? CompleteIteration() : CommandStatus.Running;
@@ -277,7 +256,7 @@ namespace Pragma.CommandExecutor
             }
             catch
             {
-                // Tracked so that the faulted run cancels and releases it together with its siblings.
+                // Tracked so that the faulted run releases it as interrupted together with its siblings.
                 _running.Add(node);
                 throw;
             }
@@ -288,7 +267,7 @@ namespace Pragma.CommandExecutor
             }
             else
             {
-                node.Release();
+                node.Release(false);
             }
 
             return status;

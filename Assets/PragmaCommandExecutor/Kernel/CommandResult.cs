@@ -1,27 +1,13 @@
-using System;
-
 namespace Pragma.CommandExecutor
 {
-    public readonly struct CommandResult
+    /// <summary>
+    /// How a run finished. A run never throws: when a processor throws, the run finishes as <see cref="Faulted"/>
+    /// and the exception is logged, or rethrown from <c>await</c> by the UniTask integration.
+    /// </summary>
+    public enum CommandResult
     {
-        public static CommandResult Completed => new(CommandOutcome.Completed, null);
-        public static CommandResult Cancelled => new(CommandOutcome.Cancelled, null);
-
-        public CommandOutcome Outcome { get; }
-        public Exception Exception { get; }
-
-        public bool IsCompleted => Outcome == CommandOutcome.Completed;
-        public bool IsCancelled => Outcome == CommandOutcome.Cancelled;
-        public bool IsFaulted => Outcome == CommandOutcome.Faulted;
-
-        public CommandResult(CommandOutcome outcome, Exception exception)
-        {
-            Outcome = outcome;
-            Exception = exception;
-        }
-
-        public static CommandResult Faulted(Exception exception) => new(CommandOutcome.Faulted, exception);
-
-        public override string ToString() => IsFaulted ? $"{Outcome}: {Exception?.Message}" : Outcome.ToString();
+        Completed = 0,
+        Cancelled = 1,
+        Faulted = 2,
     }
 }

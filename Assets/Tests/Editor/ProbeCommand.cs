@@ -57,14 +57,9 @@ namespace Pragma.CommandExecutor.Tests
             return Evaluate();
         }
 
-        public void Cancel()
+        public void Cleanup(bool interrupted)
         {
-            Write("cancel");
-        }
-
-        public void Shutdown()
-        {
-            Write("shutdown");
+            Write(interrupted ? "interrupt" : "cleanup");
             _command = null;
         }
 

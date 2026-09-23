@@ -1,0 +1,9 @@
+<!--
+  Keeps the package assemblies whole under managed code stripping, High included.
+  Command and processor types of every other assembly (your own processors) are kept by
+  Editor/CommandExecutorLinkerProcessor.cs, which generates an additional link.xml for each player build.
+-->
+<linker>
+  <assembly fullname="Pragma.CommandExecutor" preserve="all"/>
+  <assembly fullname="Pragma.CommandExecutor.UniTask" preserve="all" ignoreIfMissing="1"/>
+</linker>

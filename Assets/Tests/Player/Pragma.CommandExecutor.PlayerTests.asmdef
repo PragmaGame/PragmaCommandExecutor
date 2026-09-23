@@ -1,0 +1,19 @@
+{
+    "name": "Pragma.CommandExecutor.PlayerTests",
+    "rootNamespace": "Pragma.CommandExecutor.Tests",
+    "references": [
+        "Pragma.CommandExecutor",
+        "Pragma.CommandExecutor.UniTask",
+        "Pragma.CommandExecutor.Examples",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
