@@ -114,8 +114,8 @@ code 0 only when every check passed.
 
 ## Git
 
-Do not commit or push unless asked: the maintainer reviews and commits changes. The maintainer prefers answers in
-Russian; everything in the repository stays in English.
+Commit finished work yourself (tests pass, documentation updated); push only when asked. The maintainer prefers
+answers in Russian; everything in the repository stays in English.
 
 Commit subjects (the first line of the message) are at most 72 characters: what was done, briefly. Details go
 to the body, after a blank line.
