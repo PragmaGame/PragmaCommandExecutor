@@ -16,7 +16,7 @@ namespace Pragma.CommandExecutor.Tests
 
         private CommandExecutor _executor;
         private List<string> _log;
-        private List<GameObject> _gameObjects;
+        private List<Object> _objects;
 
         [SetUp]
         public void SetUp()
@@ -24,12 +24,12 @@ namespace Pragma.CommandExecutor.Tests
             _executor = new CommandExecutor(
                 null,
                 new ICommandRegistrationContext[] { new DefaultCommandRegistrationContext() },
-                autoTick: false);
+                new CommandExecutorSettings { IsAutoTicked = false });
 
             _executor.AddRegistration<ProbeCommand, ProbeProcessor>();
             _executor.AddRegistration<StatelessProbeCommand, StatelessProbeProcessor>();
             _log = new List<string>();
-            _gameObjects = new List<GameObject>();
+            _objects = new List<Object>();
         }
 
         [TearDown]
@@ -37,9 +37,13 @@ namespace Pragma.CommandExecutor.Tests
         {
             _executor.Dispose();
 
-            foreach (var gameObject in _gameObjects)
+            foreach (var unityObject in _objects)
             {
-                Object.DestroyImmediate(gameObject);
+                // Some tests destroy their objects themselves.
+                if (unityObject != null)
+                {
+                    Object.DestroyImmediate(unityObject);
+                }
             }
         }
 
@@ -216,7 +220,7 @@ namespace Pragma.CommandExecutor.Tests
         }
 
         [Test]
-        public void StatelessProcessor_IsSharedByAllRuns()
+        public void StatelessProcessor_IsSharedByAllRuns_AndCompletesInsideExecute()
         {
             var processors = new List<ICommandProcessor>();
 
@@ -225,10 +229,164 @@ namespace Pragma.CommandExecutor.Tests
 
             Assert.AreEqual(3, processors.Count);
             Assert.AreEqual(1, processors.Distinct().Count());
-
-            Tick();
             Assert.IsFalse(first.IsRunning);
             Assert.IsFalse(second.IsRunning);
+        }
+
+        [Test]
+        public void StatelessProcessor_IsReenteredByNestedRun()
+        {
+            var processors = new List<ICommandProcessor>();
+            var outer = StatelessProbe(processors);
+            outer.OnExecute = () => _executor.Execute(StatelessProbe(processors));
+
+            var handle = _executor.Execute(outer);
+
+            Assert.AreEqual(2, processors.Count);
+            Assert.AreSame(processors[0], processors[1]);
+            Assert.IsFalse(handle.IsRunning);
+        }
+
+        [Test]
+        public void StatelessProcessor_Exception_FaultsRun()
+        {
+            var boom = StatelessProbe(new List<ICommandProcessor>());
+            boom.OnExecute = () => throw new InvalidOperationException("stateless boom");
+
+            var handle = _executor.Execute(Sequence(Probe("p", 1), boom, Callback("never")));
+            CommandResult? result = null;
+            handle.OnFinished(r => result = r);
+
+            LogAssert.Expect(LogType.Exception, new Regex("stateless boom"));
+            Tick();
+
+            Assert.AreEqual(CommandResult.Faulted, result);
+            Assert.IsFalse(_log.Contains("never"));
+            Assert.IsFalse(handle.IsRunning);
+        }
+
+        [Test]
+        public void AddRegistration_ProcessorOfNeitherKind_Throws()
+        {
+            Assert.Throws<ArgumentException>(() => _executor.AddRegistration<ProbeCommand, ContractlessProcessor>());
+        }
+
+        [Test]
+        public void AddRegistration_ProcessorOfBothKinds_Throws()
+        {
+            Assert.Throws<ArgumentException>(() => _executor.AddRegistration<ProbeCommand, AmbiguousProcessor>());
+        }
+
+        [Test]
+        public void Settings_ChangedAfterConstruction_DoNotAffectTheExecutor()
+        {
+            var settings = new CommandExecutorSettings { IsAutoTicked = false };
+            var executor = new CommandExecutor(null, null, settings);
+            executor.AddRegistration<ProbeCommand, ProbeProcessor>();
+            settings.IsAutoTicked = true;
+
+            var handle = executor.Execute(Probe("p", 1));
+
+            Assert.DoesNotThrow(() => executor.Tick(FRAME));
+            Assert.IsFalse(handle.IsRunning);
+            executor.Dispose();
+        }
+
+        [Test]
+        public void Tick_OnAutoTickedExecutor_Throws()
+        {
+            var executor = new CommandExecutor(null, null);
+
+            Assert.Throws<InvalidOperationException>(() => executor.Tick(FRAME));
+            executor.Dispose();
+        }
+
+        [Test]
+        public void Tick_AfterDispose_DoesNothing()
+        {
+            _executor.Dispose();
+
+            Assert.DoesNotThrow(() => _executor.Tick(FRAME));
+        }
+
+        [Test]
+        public void UnknownUpdatePhase_Throws()
+        {
+            var settings = new CommandExecutorSettings { UpdatePhase = (CommandUpdatePhase)42 };
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => new CommandExecutor(null, null, settings));
+        }
+
+        [Test]
+        public void Command_TakesDataFromPreset()
+        {
+            var transform = CreateTransform();
+            var preset = CreatePreset(Vector3.zero, Vector3.one * 2f);
+            var command = new ScaleCommand { Context = transform };
+            command.UsePreset(preset);
+
+            var handle = _executor.Execute(command);
+            Tick(2);
+
+            AssertApproximately(Vector3.one * 2f, transform.localScale);
+            Assert.AreSame(preset.Data, command.Data);
+            Assert.IsFalse(handle.IsRunning);
+        }
+
+        [Test]
+        public void Command_UsingMissingPreset_FaultsRun()
+        {
+            var preset = CreatePreset(Vector3.zero, Vector3.one);
+            var command = new ScaleCommand { Context = CreateTransform() };
+            command.UsePreset(preset);
+            Object.DestroyImmediate(preset);
+
+            LogAssert.Expect(LogType.Exception, new Regex("uses a preset, but none is assigned"));
+            var handle = _executor.Execute(command);
+
+            Assert.IsFalse(handle.IsRunning);
+        }
+
+        [Test]
+        public void ReleaseCommand_ResetsLerpDataInPlace_AndLeavesPresetIntact()
+        {
+            var preset = CreatePreset(Vector3.one, Vector3.one * 3f);
+            var command = _executor.RentCommand<ScaleCommand>();
+            var data = command.Data;
+            data.To = Vector3.one * 5f;
+            command.UsePreset(preset);
+
+            _executor.ReleaseCommand(command);
+
+            Assert.IsFalse(command.IsUsePreset);
+            Assert.IsNull(command.Preset);
+            Assert.AreSame(data, command.Data);
+            AssertApproximately(Vector3.zero, data.To);
+            AssertApproximately(Vector3.one * 3f, preset.Data.To);
+        }
+
+        [Test]
+        public void StatefulProcessor_FirstTickComesInStartFrame_WithZeroDelta()
+        {
+            var probe = Probe("p", 1);
+            probe.Deltas = new List<float>();
+
+            var handle = _executor.Execute(probe);
+            CollectionAssert.AreEqual(new[] { 0f }, probe.Deltas);
+            Assert.IsTrue(handle.IsRunning);
+
+            Tick();
+            CollectionAssert.AreEqual(new[] { 0f, FRAME }, probe.Deltas);
+            Assert.IsFalse(handle.IsRunning);
+        }
+
+        [Test]
+        public void StatefulProcessor_CompletingOnFirstTick_CompletesInsideExecute()
+        {
+            var handle = _executor.Execute(Sequence(Probe("p", 0), Callback("after")));
+
+            CollectionAssert.AreEqual(new[] { "start:p", "end:p", "cleanup:p", "after" }, _log);
+            Assert.IsFalse(handle.IsRunning);
         }
 
         [Test]
@@ -431,20 +589,28 @@ namespace Pragma.CommandExecutor.Tests
 
         private static ScaleCommand Scale(Transform transform, AnimationCurve curve)
         {
-            return new ScaleCommand
-            {
-                Context = transform,
-                From = Vector3.zero,
-                To = Vector3.one,
-                Duration = FRAME * 2,
-                Curve = curve,
-            };
+            var command = new ScaleCommand { Context = transform };
+            command.Data.From = Vector3.zero;
+            command.Data.To = Vector3.one;
+            command.Data.Duration = FRAME * 2;
+            command.Data.Curve = curve;
+            return command;
+        }
+
+        private LerpVector3PresetConfig CreatePreset(Vector3 from, Vector3 to)
+        {
+            var preset = ScriptableObject.CreateInstance<LerpVector3PresetConfig>();
+            _objects.Add(preset);
+            preset.Data.From = from;
+            preset.Data.To = to;
+            preset.Data.Duration = FRAME * 2;
+            return preset;
         }
 
         private Transform CreateTransform()
         {
             var gameObject = new GameObject(TestContext.CurrentContext.Test.Name);
-            _gameObjects.Add(gameObject);
+            _objects.Add(gameObject);
             return gameObject.transform;
         }
 

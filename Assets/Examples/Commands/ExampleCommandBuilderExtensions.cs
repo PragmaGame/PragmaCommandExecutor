@@ -20,10 +20,7 @@ namespace Pragma.CommandExecutor.Examples
         {
             builder.Join(out MoveCommand command);
             command.Context = context;
-            command.From = from;
-            command.To = to;
-            command.Duration = duration;
-            command.Curve = curve;
+            SetLerp(command.Data, from, to, duration, curve);
             return builder;
         }
 
@@ -37,10 +34,7 @@ namespace Pragma.CommandExecutor.Examples
         {
             builder.Join(out RotateCommand command);
             command.Context = context;
-            command.From = from;
-            command.To = to;
-            command.Duration = duration;
-            command.Curve = curve;
+            SetLerp(command.Data, from, to, duration, curve);
             return builder;
         }
 
@@ -64,6 +58,14 @@ namespace Pragma.CommandExecutor.Examples
             builder.Join(out AddScoreCommand command);
             command.Amount = amount;
             return builder;
+        }
+
+        private static void SetLerp(LerpData<Vector3> data, Vector3 from, Vector3 to, float duration, AnimationCurve curve)
+        {
+            data.From = from;
+            data.To = to;
+            data.Duration = duration;
+            data.Curve = curve;
         }
     }
 }

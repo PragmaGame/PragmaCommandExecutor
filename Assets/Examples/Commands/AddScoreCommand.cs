@@ -31,7 +31,7 @@ namespace Pragma.CommandExecutor.Examples
     /// Has no parameterless constructor, so the default <see cref="ActivatorFactory"/> cannot create it:
     /// the executor gets an <see cref="IObjectFactory"/> that knows how, see <see cref="ScoreObjectFactory"/>.
     /// </summary>
-    public class AddScoreCommandProcessor : ICommandProcessor<AddScoreCommand>, IStatelessCommandProcessor
+    public class AddScoreCommandProcessor : IStatelessCommandProcessor<AddScoreCommand>
     {
         private readonly ScoreBoard _scoreBoard;
 
@@ -40,10 +40,9 @@ namespace Pragma.CommandExecutor.Examples
             _scoreBoard = scoreBoard;
         }
 
-        public CommandStatus Start(AddScoreCommand command)
+        public void Execute(AddScoreCommand command)
         {
             _scoreBoard.Add(command.Amount);
-            return CommandStatus.Completed;
         }
     }
 

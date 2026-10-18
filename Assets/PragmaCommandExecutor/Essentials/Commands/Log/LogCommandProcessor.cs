@@ -2,17 +2,16 @@
 
 namespace Pragma.CommandExecutor
 {
-    public class LogCommandProcessor : ICommandProcessor<LogCommand>, IStatelessCommandProcessor
+    public class LogCommandProcessor : IStatelessCommandProcessor<LogCommand>
     {
         [UnityEngine.Scripting.RequiredMember]
         public LogCommandProcessor()
         {
         }
 
-        public CommandStatus Start(LogCommand command)
+        public void Execute(LogCommand command)
         {
             Debug.unityLogger.Log(command.LogType, command.Message);
-            return CommandStatus.Completed;
         }
     }
 }

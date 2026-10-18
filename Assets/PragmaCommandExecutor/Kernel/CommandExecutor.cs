@@ -17,21 +17,25 @@ namespace Pragma.CommandExecutor
         private readonly Stack<ProcessorNode> _processorNodesPool = new();
         private readonly Stack<GroupNode> _groupNodesPool = new();
 
-        private readonly bool _autoTick;
+        // A copy: changing the settings passed to the constructor does not affect the executor.
+        private readonly CommandExecutorSettings _settings;
+
         private bool _isTicking;
         private bool _isDisposed;
 
         internal long TickIndex { get; private set; }
 
+        // The only constructor on purpose: DI containers such as VContainer pick the one with the most parameters.
+        // VContainer ignores default parameter values, so it needs a registered CommandExecutorSettings instance.
         /// <summary>
-        /// Creates an executor that is ticked automatically from the player loop until <see cref="Dispose"/> is called.
+        /// Creates an executor configured by <paramref name="settings"/> (<c>null</c> — the defaults: ticked by the player
+        /// loop at the beginning of <c>Update</c> on scaled time). An auto-ticked executor is ticked until
+        /// <see cref="Dispose"/> is called.
         /// </summary>
-        public CommandExecutor(IObjectFactory factory, IEnumerable<ICommandRegistrationContext> registrationContexts)
-            : this(factory, registrationContexts, autoTick: true)
-        {
-        }
-
-        internal CommandExecutor(IObjectFactory factory, IEnumerable<ICommandRegistrationContext> registrationContexts, bool autoTick)
+        public CommandExecutor(
+            IObjectFactory factory,
+            IEnumerable<ICommandRegistrationContext> registrationContexts,
+            CommandExecutorSettings settings = null)
         {
             _factory = factory ?? _defaultFactory;
 
@@ -46,11 +50,11 @@ namespace Pragma.CommandExecutor
                 }
             }
 
-            _autoTick = autoTick;
+            _settings = settings?.Clone() ?? new CommandExecutorSettings();
 
-            if (autoTick)
+            if (_settings.IsAutoTicked)
             {
-                CommandExecutorPlayerLoop.Register(this);
+                CommandExecutorPlayerLoop.Register(this, _settings.UpdatePhase);
             }
         }
 
@@ -66,13 +70,23 @@ namespace Pragma.CommandExecutor
                 return;
             }
 
+            var isStateless = typeof(IStatelessCommandProcessor).IsAssignableFrom(processorType);
+
+            if (isStateless == typeof(IStatefulCommandProcessor).IsAssignableFrom(processorType))
+            {
+                throw new ArgumentException(
+                    $"Command processor '{processorType}' must implement either {nameof(IStatelessCommandProcessor)} " +
+                    $"or {nameof(IStatefulCommandProcessor)}",
+                    nameof(processorType));
+            }
+
             // Runs that still hold a processor of the replaced registration return it to the detached pool.
-            _processorPools[commandType] = new ProcessorPool(processorType);
+            _processorPools[commandType] = new ProcessorPool(processorType, isStateless);
         }
 
         public void AddRegistration<TCommand, TProcessor>()
             where TCommand : ICommand
-            where TProcessor : ICommandProcessor
+            where TProcessor : ICommandProcessor<TCommand>
         {
             AddRegistration(typeof(TCommand), typeof(TProcessor));
         }
@@ -159,9 +173,9 @@ namespace Pragma.CommandExecutor
 
             _isDisposed = true;
 
-            if (_autoTick)
+            if (_settings.IsAutoTicked)
             {
-                CommandExecutorPlayerLoop.Unregister(this);
+                CommandExecutorPlayerLoop.Unregister(this, _settings.UpdatePhase);
             }
 
             for (var i = 0; i < _runners.Count; i++)
@@ -175,13 +189,97 @@ namespace Pragma.CommandExecutor
             }
         }
 
-        internal void Tick(float deltaTime)
+        /// <summary>
+        /// Advances every running command tree by one frame of <paramref name="deltaTime"/> seconds. Only for an executor
+        /// created with <see cref="CommandExecutorSettings.IsAutoTicked"/> set to <c>false</c>: the player loop ticks the
+        /// others. Not re-entrant; does nothing after <see cref="Dispose"/>.
+        /// </summary>
+        public void Tick(float deltaTime)
         {
             if (_isDisposed)
             {
                 return;
             }
 
+            if (_settings.IsAutoTicked)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(CommandExecutor)} is ticked by the player loop; create it with " +
+                    $"{nameof(CommandExecutorSettings)}.{nameof(CommandExecutorSettings.IsAutoTicked)} = false to tick it yourself");
+            }
+
+            TickRunners(deltaTime);
+        }
+
+        internal void TickFromPlayerLoop(float deltaTime, float unscaledDeltaTime)
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            TickRunners(_settings.TimeMode == CommandTimeMode.Unscaled ? unscaledDeltaTime : deltaTime);
+        }
+
+        internal IStatefulCommandProcessor RentProcessor(ProcessorPool pool)
+        {
+            return pool.TryRent(out var processor)
+                ? processor
+                : CreateProcessor<IStatefulCommandProcessor>(pool.ProcessorType);
+        }
+
+        /// <summary>
+        /// Returns the node that runs <paramref name="command"/> in <paramref name="runner"/>, not started yet. A command of
+        /// a stateless processor needs no node: it is executed right here, and the result is <c>null</c>.
+        /// </summary>
+        internal CommandNode CreateNodeOrExecute(ICommand command, TreeRunner runner)
+        {
+            if (command is null)
+            {
+                throw new ArgumentNullException(nameof(command), "Command group contains a null command");
+            }
+
+            if (command is CommandGroup group)
+            {
+                return CreateGroupNode(group.Commands, group.Mode, group.Repeat, runner);
+            }
+
+            var pool = GetProcessorPool(command);
+
+            if (pool.IsStateless)
+            {
+                (pool.Shared ??= CreateProcessor<IStatelessCommandProcessor>(pool.ProcessorType)).Execute(command);
+                return null;
+            }
+
+            var node = _processorNodesPool.Count > 0 ? _processorNodesPool.Pop() : new ProcessorNode(this);
+            node.Setup(runner, command, pool);
+            return node;
+        }
+
+        internal GroupNode CreateGroupNode(
+            IReadOnlyList<ICommand> commands,
+            GroupMode mode,
+            int repeat,
+            TreeRunner runner)
+        {
+            var node = _groupNodesPool.Count > 0 ? _groupNodesPool.Pop() : new GroupNode(this);
+            node.Setup(runner, commands, mode, repeat);
+            return node;
+        }
+
+        internal void ReleaseNode(ProcessorNode node)
+        {
+            _processorNodesPool.Push(node);
+        }
+
+        internal void ReleaseNode(GroupNode node)
+        {
+            _groupNodesPool.Push(node);
+        }
+
+        private void TickRunners(float deltaTime)
+        {
             if (_isTicking)
             {
                 throw new InvalidOperationException($"{nameof(CommandExecutor)}.{nameof(Tick)} is not re-entrant");
@@ -207,7 +305,7 @@ namespace Pragma.CommandExecutor
             }
         }
 
-        internal ProcessorPool GetProcessorPool(ICommand command)
+        private ProcessorPool GetProcessorPool(ICommand command)
         {
             var commandType = command.GetType();
 
@@ -219,61 +317,15 @@ namespace Pragma.CommandExecutor
             return pool;
         }
 
-        internal ICommandProcessor RentProcessor(ProcessorPool pool)
+        private TProcessor CreateProcessor<TProcessor>(Type processorType) where TProcessor : class
         {
-            if (pool.TryRent(out var processor))
-            {
-                return processor;
-            }
-
-            var processorType = pool.ProcessorType;
-
             if (!(_factory.TryCreate(processorType, out var instance) || _defaultFactory.TryCreate(processorType, out instance))
-                || instance is not ICommandProcessor created)
+                || instance is not TProcessor processor)
             {
                 throw new InvalidOperationException($"Command processor '{processorType}' cannot be created");
             }
 
-            pool.OnCreated(created);
-            return created;
-        }
-
-        internal CommandNode CreateNode(ICommand command, TreeRunner runner)
-        {
-            if (command is null)
-            {
-                throw new ArgumentNullException(nameof(command), "Command group contains a null command");
-            }
-
-            if (command is CommandGroup group)
-            {
-                return CreateGroupNode(group.Commands, group.Mode, group.Repeat, runner);
-            }
-
-            var node = _processorNodesPool.Count > 0 ? _processorNodesPool.Pop() : new ProcessorNode(this);
-            node.Setup(runner, command);
-            return node;
-        }
-
-        internal GroupNode CreateGroupNode(
-            IReadOnlyList<ICommand> commands,
-            GroupMode mode,
-            int repeat,
-            TreeRunner runner)
-        {
-            var node = _groupNodesPool.Count > 0 ? _groupNodesPool.Pop() : new GroupNode(this);
-            node.Setup(runner, commands, mode, repeat);
-            return node;
-        }
-
-        internal void ReleaseNode(ProcessorNode node)
-        {
-            _processorNodesPool.Push(node);
-        }
-
-        internal void ReleaseNode(GroupNode node)
-        {
-            _groupNodesPool.Push(node);
+            return processor;
         }
 
         private CommandHandle Launch(

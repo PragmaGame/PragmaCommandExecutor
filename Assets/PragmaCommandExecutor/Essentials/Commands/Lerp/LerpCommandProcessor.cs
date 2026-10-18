@@ -2,52 +2,54 @@
 
 namespace Pragma.CommandExecutor
 {
-    public abstract class LerpCommandProcessor<TCommand, TValue> : ICommandProcessor<TCommand>
-        where TCommand : LerpCommand<TValue>
+    public abstract class LerpCommandProcessor<TCommand, TContext, TValue> : IStatefulCommandProcessor<TCommand>
+        where TCommand : LerpCommand<TContext, TValue>
+        where TContext : class
     {
-        private TCommand _command;
+        private TContext _context;
+        private LerpData<TValue> _data;
         private AnimationCurve _curve;
         private float _elapsed;
 
-        public CommandStatus Start(TCommand command)
+        public void Start(TCommand command)
         {
-            _command = command;
+            _context = command.Context;
+            _data = command.Data;
             _elapsed = 0f;
 
             // Unity deserializes a curve left unset in the inspector as an empty one.
-            var curve = command.Curve;
+            var curve = _data.Curve;
             _curve = curve != null && curve.length > 0 ? curve : null;
-
-            return Tick(0f);
         }
 
         public CommandStatus Tick(float deltaTime)
         {
             _elapsed += deltaTime;
 
-            var context = _command.Context;
-
-            if (context == null)
+            // A destroyed Unity object equals null only through the operator of UnityEngine.Object.
+            if (_context is Object unityObject ? unityObject == null : _context == null)
             {
                 return CommandStatus.Completed;
             }
 
-            var progress = _command.Duration > 0f ? Mathf.Clamp01(_elapsed / _command.Duration) : 1f;
+            var duration = _data.Duration;
+            var progress = duration > 0f ? Mathf.Clamp01(_elapsed / duration) : 1f;
             var t = _curve?.Evaluate(progress) ?? progress;
 
-            Apply(context, Lerp(_command.From, _command.To, t));
+            Apply(_context, Lerp(_data.From, _data.To, t));
 
             return progress < 1f ? CommandStatus.Running : CommandStatus.Completed;
         }
 
         public void Cleanup(bool interrupted)
         {
-            // Both belong to the command, which goes back to its own pool.
-            _command = default;
+            // All of them belong to the command, which goes back to its own pool.
+            _context = null;
+            _data = null;
             _curve = null;
         }
 
         protected abstract TValue Lerp(TValue from, TValue to, float t);
-        protected abstract void Apply(Transform context, TValue value);
+        protected abstract void Apply(TContext context, TValue value);
     }
 }

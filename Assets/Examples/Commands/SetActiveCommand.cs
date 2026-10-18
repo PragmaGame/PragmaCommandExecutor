@@ -17,20 +17,18 @@ namespace Pragma.CommandExecutor.Examples
     }
 
     /// <summary>
-    /// An instant command: all the work happens in <see cref="Start"/>, which returns <see cref="CommandStatus.Completed"/>,
-    /// so <c>Tick</c> and <c>Cleanup</c> keep their default implementations. It keeps no per-run state, so
-    /// <see cref="IStatelessCommandProcessor"/> lets one shared instance serve every run.
+    /// An instant command: all the work happens in <see cref="Execute"/>, and the command completes inside it. It keeps
+    /// no per-run state, so <see cref="IStatelessCommandProcessor{TCommand}"/> lets one shared instance serve every run
+    /// and the executor needs no runtime node for it.
     /// </summary>
-    public class SetActiveCommandProcessor : ICommandProcessor<SetActiveCommand>, IStatelessCommandProcessor
+    public class SetActiveCommandProcessor : IStatelessCommandProcessor<SetActiveCommand>
     {
-        public CommandStatus Start(SetActiveCommand command)
+        public void Execute(SetActiveCommand command)
         {
             if (command.Target != null)
             {
                 command.Target.SetActive(command.IsActive);
             }
-
-            return CommandStatus.Completed;
         }
     }
 }

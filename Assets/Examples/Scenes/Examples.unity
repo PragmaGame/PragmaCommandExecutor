@@ -395,16 +395,19 @@ MonoBehaviour:
     - rid: 6584675499845615695
       type: {class: ScaleCommand, ns: Pragma.CommandExecutor, asm: Pragma.CommandExecutor}
       data:
-        <Context>k__BackingField: {fileID: 160112945}
-        <From>k__BackingField: {x: 1.6, y: 0.5, z: 1.6}
-        <To>k__BackingField: {x: 1, y: 1, z: 1}
-        <Duration>k__BackingField: 0.4
-        <Curve>k__BackingField:
-          serializedVersion: 2
-          m_Curve: []
-          m_PreInfinity: 2
-          m_PostInfinity: 2
-          m_RotationOrder: 4
+        _context: {fileID: 160112945}
+        _isUsePreset: 0
+        _data:
+          <From>k__BackingField: {x: 1.6, y: 0.5, z: 1.6}
+          <To>k__BackingField: {x: 1, y: 1, z: 1}
+          <Duration>k__BackingField: 0.4
+          <Curve>k__BackingField:
+            serializedVersion: 2
+            m_Curve: []
+            m_PreInfinity: 2
+            m_PostInfinity: 2
+            m_RotationOrder: 4
+        _preset: {fileID: 0}
     - rid: 6584675499845615696
       type: {class: DelayCommand, ns: Pragma.CommandExecutor, asm: Pragma.CommandExecutor}
       data:
@@ -417,29 +420,35 @@ MonoBehaviour:
     - rid: 6584675499845615698
       type: {class: ScaleCommand, ns: Pragma.CommandExecutor, asm: Pragma.CommandExecutor}
       data:
-        <Context>k__BackingField: {fileID: 160112945}
-        <From>k__BackingField: {x: 1, y: 1, z: 1}
-        <To>k__BackingField: {x: 1.6, y: 0.5, z: 1.6}
-        <Duration>k__BackingField: 0.25
-        <Curve>k__BackingField:
-          serializedVersion: 2
-          m_Curve: []
-          m_PreInfinity: 2
-          m_PostInfinity: 2
-          m_RotationOrder: 4
+        _context: {fileID: 160112945}
+        _isUsePreset: 0
+        _data:
+          <From>k__BackingField: {x: 1, y: 1, z: 1}
+          <To>k__BackingField: {x: 1.6, y: 0.5, z: 1.6}
+          <Duration>k__BackingField: 0.25
+          <Curve>k__BackingField:
+            serializedVersion: 2
+            m_Curve: []
+            m_PreInfinity: 2
+            m_PostInfinity: 2
+            m_RotationOrder: 4
+        _preset: {fileID: 0}
     - rid: 6584675499845615699
       type: {class: RotateCommand, ns: Pragma.CommandExecutor.Examples, asm: Pragma.CommandExecutor.Examples}
       data:
-        <Context>k__BackingField: {fileID: 160112945}
-        <From>k__BackingField: {x: 0, y: 0, z: 0}
-        <To>k__BackingField: {x: 0, y: 90, z: 0}
-        <Duration>k__BackingField: 0.25
-        <Curve>k__BackingField:
-          serializedVersion: 2
-          m_Curve: []
-          m_PreInfinity: 2
-          m_PostInfinity: 2
-          m_RotationOrder: 4
+        _context: {fileID: 160112945}
+        _isUsePreset: 0
+        _data:
+          <From>k__BackingField: {x: 0, y: 0, z: 0}
+          <To>k__BackingField: {x: 0, y: 90, z: 0}
+          <Duration>k__BackingField: 0.25
+          <Curve>k__BackingField:
+            serializedVersion: 2
+            m_Curve: []
+            m_PreInfinity: 2
+            m_PostInfinity: 2
+            m_RotationOrder: 4
+        _preset: {fileID: 0}
 --- !u!4 &318998798
 Transform:
   m_ObjectHideFlags: 0

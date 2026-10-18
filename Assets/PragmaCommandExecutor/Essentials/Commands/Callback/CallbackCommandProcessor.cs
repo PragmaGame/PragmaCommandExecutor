@@ -1,16 +1,15 @@
 ﻿namespace Pragma.CommandExecutor
 {
-    public class CallbackCommandProcessor : ICommandProcessor<CallbackCommand>, IStatelessCommandProcessor
+    public class CallbackCommandProcessor : IStatelessCommandProcessor<CallbackCommand>
     {
         [UnityEngine.Scripting.RequiredMember]
         public CallbackCommandProcessor()
         {
         }
 
-        public CommandStatus Start(CallbackCommand command)
+        public void Execute(CallbackCommand command)
         {
             command.Callback?.Invoke();
-            return CommandStatus.Completed;
         }
     }
 }

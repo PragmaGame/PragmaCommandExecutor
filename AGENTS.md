@@ -15,11 +15,12 @@ The package is pre-1.0: backward compatibility is not required yet, prefer clean
 
 | Path | Contents |
 |------|----------|
-| `Assets/PragmaCommandExecutor/Kernel` | Everything the executor needs: `ICommand`, `CommandGroup`, `GroupMode`, `CommandExecutor`, `CommandBuilder`, `CommandHandle`, `CommandResult`, processor contracts (`Processors/`), `IObjectFactory` (`Factory/`), and the internal runtime (`Execution/`: `TreeRunner`, `CommandNode`, `ProcessorPool`, `CommandExecutorPlayerLoop`). |
+| `Assets/PragmaCommandExecutor/Kernel` | Everything the executor needs: `ICommand`, `CommandGroup`, `GroupMode`, `CommandExecutor` with `CommandExecutorSettings`, `CommandBuilder`, `CommandHandle`, `CommandResult`, `Command<TContext, TData>` and `CommandPresetConfig<TData>` (`Data/`), processor contracts (`Processors/`), `IObjectFactory` (`Factory/`), and the internal runtime (`Execution/`: `TreeRunner`, `CommandNode`, `ProcessorPool`, `CommandExecutorPlayerLoop`). |
 | `Assets/PragmaCommandExecutor/Essentials` | Content on top of the kernel: default commands (`Commands/`), builder shortcuts, `CommandExecutor.Singleton`, the optional UniTask integration (`UniTask/`, own asmdef). |
-| `Assets/PragmaCommandExecutor/Editor` | Editor-only code shipped with the package: `CommandExecutorLinkerProcessor` (generated link.xml). |
+| `Assets/PragmaCommandExecutor/Editor` | Editor-only code shipped with the package: `CommandExecutorLinkerProcessor` (generated link.xml), inspector drawers (`ShowIfDrawer`). |
 | `Assets/PragmaCommandExecutor/link.xml` | Keeps the package assemblies whole under managed code stripping. |
 | `Assets/Tests/Editor` | EditMode tests: functional (`CommandExecutorTests`), UniTask (`CommandExecutorUniTaskTests`), performance and zero-allocation (`CommandExecutorPerformanceTests`, category `Performance`). |
+| `Assets/Tests/PlayMode` | PlayMode tests of auto-ticked executors in the real player loop (`CommandExecutorPlayerLoopTests`): phases, unscaled time, manual ticking. |
 | `Assets/Tests/Player` | Player smoke test (`PlayerSmokeTest` scene + script) and its build menu item for checking code stripping. |
 | `Assets/Examples` | Example scene and scripts; they double as the "user code" that the stripping checks run against. |
 
@@ -32,15 +33,23 @@ The package is pre-1.0: backward compatibility is not required yet, prefer clean
   command type, its namespace or its assembly breaks existing scenes and assets.
 - **Commands are pure data.** All runtime state lives in nodes (`CommandNode`) and processors, so the same command
   or group may be executing in several runs at once. Never store run state in a command.
-- **Processor contract** (`ICommandProcessor<TCommand>`): `Start(command)` performs the first step and returns a
-  `CommandStatus`; `Tick(deltaTime)` runs once per frame from the next frame while `Running`; `Cleanup(interrupted)`
-  runs exactly once per run before the processor returns to its pool (`interrupted` is true only for processors still
-  running when the run was cancelled or faulted). `IStatelessCommandProcessor` shares one instance across all runs.
+- **Processor contracts:** a processor implements exactly one of two; `AddRegistration` throws otherwise.
+  `IStatelessCommandProcessor<TCommand>.Execute(command)` completes the command inside the call; one shared instance
+  serves every run (re-entrantly) and the command gets no runtime node. `IStatefulCommandProcessor<TCommand>` is
+  pooled per run: `Start(command)`, then the kernel calls `Tick(0)` right away in the start frame, then `Tick(deltaTime)`
+  once per frame while `Running`; `Cleanup(interrupted)` runs exactly once per run before the processor returns to its
+  pool (`interrupted` is true only for processors still running when the run was cancelled or faulted).
 - **Runs never throw.** A processor exception finishes the run as `CommandResult.Faulted` and is logged exactly once
   by `TreeRunner`; only the UniTask integration rethrows it from `await` (and then it is not logged). API misuse
   (null arguments, a disposed executor) still throws.
 - **Execution is synchronous at start:** `Execute` runs instant commands at the head of the tree inside the call;
-  a command started during a step gets its first `Tick` on the next frame. Several tests pin this timing.
+  a stateful command started during a step takes its start-frame step (`Start` + `Tick(0)`) there and its next `Tick`
+  on the next frame. Several tests pin this timing.
+- **Settings are copied:** `CommandExecutorSettings` is cloned by the constructor; an auto-ticked executor registers
+  in the player loop phase of its settings, and its public `Tick` throws.
+- **Command data:** `Command<TContext, TData>.Reset` drops the preset before `OnResetData`, so resetting a pooled
+  command never touches a shared preset. Commands with class data reset it in place (`LerpCommand`) to stay
+  allocation free.
 - **Zero GC allocations on the hot paths** once pools are warm: ticking, executing prebuilt trees and building trees
   with `CommandBuilder`. `CommandExecutorPerformanceTests` enforces it with `Is.Not.AllocatingGCMemory()`.
   Unity's Mono BCL allocates where .NET does not — e.g. `HashSet<T>.UnionWith(IEnumerable<T>)` boxes the enumerator —
@@ -58,7 +67,7 @@ Performance is a primary goal. For any change on the hot path (`TreeRunner`, `Co
    (running all scenarios in one process gives misleading results).
 2. Anything slower than noise (~1–2%) is a regression: find the cause or roll the change back.
 3. Known pitfall: calling a default interface method of a generic interface is slower than calling a class method,
-   so running processors implement `Tick` and `Cleanup` themselves instead of relying on the interface defaults.
+   so only the typed `Start` / `Execute` go through one; `Tick` and `Cleanup` have no defaults.
 
 ## Code stripping
 
@@ -92,11 +101,16 @@ unity --no-banner --json command recompile                              # then p
 unity --no-banner --json command recompile_status                       # data.result is a JSON *string*: parse it
 unity --no-banner --json command console                                # compile errors and logs
 unity --no-banner --json command --timeout 600 run_tests --mode editor --filter_type assembly --filter Pragma.CommandExecutor.Tests
+unity --no-banner --json command run_tests --mode playmode --filter_type assembly --filter Pragma.CommandExecutor.PlayModeTests --async_tests true
+unity --no-banner --json command test_status                            # play mode reloads the domain: poll, or read Temp/pipeline_test_status.json
 unity --no-banner --json command run_script --file <file.cs> --entry Type.Method   # run editor C# without a domain reload
 ```
 
 `recompile` answering `up_to_date` may mean the Editor already compiled the change on its own: compare the
 timestamps in `Library/ScriptAssemblies/Pragma.CommandExecutor*.dll`.
+
+Editing a scene file that is open in the Editor makes it show a modal *The open scene(s) have been modified
+externally* dialog, and every main thread command times out until it is answered.
 
 Player smoke test: *Tools → Pragma Command Executor → Build Player Smoke Test (High Stripping)* builds
 `Assets/Tests/Player/PlayerSmokeTest.unity` for the active target (Android in this project) and restores the stripping
@@ -105,9 +119,11 @@ code 0 only when every check passed.
 
 ## Tests
 
-- New behaviour gets an EditMode test in `CommandExecutorTests`. Use the `autoTick: false` internal constructor and
-  drive frames with the internal `Tick`; `ProbeCommand` records the processor lifecycle (`start`, `end`, `cleanup`,
-  `interrupt`) into a log for exact assertions.
+- New behaviour gets an EditMode test in `CommandExecutorTests`. Create the executor with
+  `new CommandExecutorSettings { IsAutoTicked = false }` and drive frames with `Tick`; `ProbeCommand` records the
+  processor lifecycle (`start`, `end`, `cleanup`, `interrupt`) into a log, and the delta of every tick into `Deltas`,
+  for exact assertions. Its `Frames` counts the frames after the start frame.
+- Behaviour of the real player loop (phases, time modes) goes to `Assets/Tests/PlayMode`.
 - Name tests `Subject_ExpectedBehaviour`. Expected `Debug.LogException` output must be declared with `LogAssert.Expect`,
   otherwise Unity fails the test.
 - Allocation and timing checks go to `CommandExecutorPerformanceTests`.

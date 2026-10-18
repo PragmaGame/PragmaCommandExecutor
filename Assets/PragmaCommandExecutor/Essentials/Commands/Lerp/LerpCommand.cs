@@ -1,28 +1,30 @@
 ﻿using System;
-using UnityEngine;
 
 namespace Pragma.CommandExecutor
 {
+    /// <summary>
+    /// Animates a value of <see cref="Command{TContext, TData}.Context"/> from <see cref="LerpData{TValue}.From"/> to
+    /// <see cref="LerpData{TValue}.To"/>. Derive a non-generic command and a <see cref="LerpCommandProcessor{TCommand, TContext, TValue}"/>
+    /// that applies the value.
+    /// </summary>
     [Serializable]
-    public class LerpCommand<TValue> : ICommand
+    public abstract class LerpCommand<TContext, TValue> : Command<TContext, LerpData<TValue>>
     {
-        [field: SerializeField] public Transform Context { get; set; }
-        [field: SerializeField] public TValue From { get; set; }
-        [field: SerializeField] public TValue To { get; set; }
-        [field: SerializeField] public float Duration { get; set; } = 0.2f;
-
-        /// <summary>
-        /// Maps normalized time to the lerp factor. <c>null</c> or a curve without keys means linear.
-        /// </summary>
-        [field: SerializeField] public AnimationCurve Curve { get; set; }
-
-        public void Reset()
+        protected override void OnResetData()
         {
-            Context = null;
-            From = default;
-            To = default;
-            Duration = 0.2f;
-            Curve = null;
+            var data = Data;
+
+            if (data == null)
+            {
+                base.OnResetData();
+                return;
+            }
+
+            // In place: a pooled command keeps its data object instead of allocating a new one.
+            data.From = default;
+            data.To = default;
+            data.Duration = LerpData<TValue>.DEFAULT_DURATION;
+            data.Curve = null;
         }
     }
 }

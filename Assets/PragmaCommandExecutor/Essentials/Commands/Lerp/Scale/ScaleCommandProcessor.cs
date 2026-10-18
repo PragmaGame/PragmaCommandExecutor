@@ -2,7 +2,7 @@
 
 namespace Pragma.CommandExecutor
 {
-    public class ScaleCommandProcessor : LerpCommandProcessor<ScaleCommand, Vector3>
+    public class ScaleCommandProcessor : LerpCommandProcessor<ScaleCommand, Transform, Vector3>
     {
         [UnityEngine.Scripting.RequiredMember]
         public ScaleCommandProcessor()

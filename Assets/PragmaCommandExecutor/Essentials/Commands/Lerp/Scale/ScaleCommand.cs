@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Pragma.CommandExecutor
 {
     [Serializable]
-    public class ScaleCommand : LerpCommand<Vector3>
+    public class ScaleCommand : LerpCommand<Transform, Vector3>
     {
     }
 }

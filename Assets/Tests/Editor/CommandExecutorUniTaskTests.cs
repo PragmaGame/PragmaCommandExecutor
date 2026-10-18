@@ -18,7 +18,10 @@ namespace Pragma.CommandExecutor.Tests
         [SetUp]
         public void SetUp()
         {
-            _executor = new CommandExecutor(null, Array.Empty<ICommandRegistrationContext>(), autoTick: false);
+            _executor = new CommandExecutor(
+                null,
+                new ICommandRegistrationContext[] { new DefaultCommandRegistrationContext() },
+                new CommandExecutorSettings { IsAutoTicked = false });
             _executor.AddRegistration<ProbeCommand, ProbeProcessor>();
             _log = new List<string>();
         }
@@ -66,6 +69,28 @@ namespace Pragma.CommandExecutor.Tests
             Assert.AreEqual(UniTaskStatus.Succeeded, task.Status);
             Assert.Contains("interrupt:p", _log);
             task.GetAwaiter().GetResult();
+        }
+
+        [Test]
+        public void BuilderExecute_WithCancelledToken_ReleasesTreeWithoutRunning()
+        {
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            DelayCommand pooled = null;
+
+            var task = _executor.GetBuilder(GroupMode.Sequential)
+                .JoinCallback(() => _log.Add("callback"))
+                .Join<DelayCommand>(delay =>
+                {
+                    delay.Duration = FRAME;
+                    pooled = delay;
+                })
+                .Execute(cancellation.Token);
+
+            Assert.AreEqual(UniTaskStatus.Succeeded, task.Status);
+            Assert.IsEmpty(_log);
+            Assert.AreSame(pooled, _executor.RentCommand<DelayCommand>());
+            Assert.AreEqual(0f, pooled.Duration);
         }
 
         private ProbeCommand Probe(string name, int frames)

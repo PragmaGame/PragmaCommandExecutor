@@ -63,6 +63,13 @@ namespace Pragma.CommandExecutor
 
         public static UniTask Execute(this CommandBuilder builder, CancellationToken cancellationToken)
         {
+            // Like the other overloads, an already cancelled token runs nothing, not even the instant head of the tree.
+            if (cancellationToken.IsCancellationRequested)
+            {
+                builder.Discard();
+                return UniTask.CompletedTask;
+            }
+
             return builder.Execute().ToUniTask(cancellationToken);
         }
     }

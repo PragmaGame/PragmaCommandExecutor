@@ -30,6 +30,7 @@ namespace Pragma.CommandExecutor
             return builder;
         }
 
+        /// <param name="curve">Easing curve over normalized time; <c>null</c> means linear.</param>
         public static CommandBuilder JoinScale(
             this CommandBuilder builder,
             Transform context,
@@ -40,10 +41,23 @@ namespace Pragma.CommandExecutor
         {
             builder.Join(out ScaleCommand command);
             command.Context = context;
-            command.From = from;
-            command.To = to;
-            command.Duration = duration;
-            command.Curve = curve;
+
+            var data = command.Data;
+            data.From = from;
+            data.To = to;
+            data.Duration = duration;
+            data.Curve = curve;
+            return builder;
+        }
+
+        /// <summary>
+        /// Scales <paramref name="context"/> as <paramref name="preset"/> says. The preset is shared, not copied.
+        /// </summary>
+        public static CommandBuilder JoinScale(this CommandBuilder builder, Transform context, CommandPresetConfig<LerpData<Vector3>> preset)
+        {
+            builder.Join(out ScaleCommand command);
+            command.Context = context;
+            command.UsePreset(preset);
             return builder;
         }
     }

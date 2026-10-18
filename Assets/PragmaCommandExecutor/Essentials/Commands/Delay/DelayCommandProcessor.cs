@@ -1,6 +1,6 @@
 ﻿namespace Pragma.CommandExecutor
 {
-    public class DelayCommandProcessor : ICommandProcessor<DelayCommand>
+    public class DelayCommandProcessor : IStatefulCommandProcessor<DelayCommand>
     {
         private float _remaining;
 
@@ -9,10 +9,9 @@
         {
         }
 
-        public CommandStatus Start(DelayCommand command)
+        public void Start(DelayCommand command)
         {
             _remaining = command.Duration;
-            return Tick(0f);
         }
 
         public CommandStatus Tick(float deltaTime)

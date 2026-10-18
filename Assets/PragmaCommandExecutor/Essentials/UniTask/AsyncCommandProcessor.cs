@@ -6,18 +6,18 @@ namespace Pragma.CommandExecutor
 {
     /// <summary>
     /// Adapter for processors written against the previous async API: implement <see cref="Execute"/> as before
-    /// and the task is polled by the executor tick. Completion is observed on the tick after the task finishes.
+    /// and the task is polled by the executor tick, the first time in the start frame. Completion is observed on the
+    /// tick after the task finishes.
     /// </summary>
-    public abstract class AsyncCommandProcessor<TCommand> : ICommandProcessor<TCommand> where TCommand : ICommand
+    public abstract class AsyncCommandProcessor<TCommand> : IStatefulCommandProcessor<TCommand> where TCommand : ICommand
     {
         private CancellationTokenSource _cancellation;
         private UniTask _task;
 
-        public CommandStatus Start(TCommand command)
+        public void Start(TCommand command)
         {
             _cancellation ??= new CancellationTokenSource();
             _task = Execute(command, _cancellation.Token);
-            return Poll();
         }
 
         public CommandStatus Tick(float deltaTime)

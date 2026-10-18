@@ -85,10 +85,7 @@ namespace Pragma.CommandExecutor
             }
             finally
             {
-                ListPool<CommandGroup>.Release(_stack);
-                HashSetPool<ICommand>.Release(_externalCommands);
-                _stack = null;
-                _externalCommands = null;
+                ReleaseLists();
             }
         }
 
@@ -104,13 +101,31 @@ namespace Pragma.CommandExecutor
         /// <returns>The root <see cref="ICommand"/> of the built tree.</returns>
         public ICommand Build()
         {
-            ListPool<CommandGroup>.Release(_stack);
-            _stack = null;
-
-            HashSetPool<ICommand>.Release(_externalCommands);
-            _externalCommands = null;
-
+            ReleaseLists();
             return _root;
+        }
+
+        /// <summary>
+        /// Releases the built tree without executing it, keeping the commands added via <see cref="Join(ICommand)"/>.
+        /// </summary>
+        internal void Discard()
+        {
+            try
+            {
+                _executor.ReleaseCommand(_root, _externalCommands);
+            }
+            finally
+            {
+                ReleaseLists();
+            }
+        }
+
+        private void ReleaseLists()
+        {
+            ListPool<CommandGroup>.Release(_stack);
+            HashSetPool<ICommand>.Release(_externalCommands);
+            _stack = null;
+            _externalCommands = null;
         }
     }
 }

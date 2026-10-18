@@ -10,6 +10,7 @@ namespace Pragma.CommandExecutor.Tests
         public bool ThrowOnStart { get; set; }
         public bool ThrowOnTick { get; set; }
         public List<string> Log { get; set; }
+        public List<float> Deltas { get; set; }
         public List<ICommandProcessor> Processors { get; set; }
 
         public void Reset()
@@ -19,22 +20,26 @@ namespace Pragma.CommandExecutor.Tests
             ThrowOnStart = false;
             ThrowOnTick = false;
             Log = null;
+            Deltas = null;
             Processors = null;
         }
     }
 
     /// <summary>
-    /// Completes after <see cref="ProbeCommand.Frames"/> ticks and records its lifecycle into <see cref="ProbeCommand.Log"/>.
+    /// Completes after <see cref="ProbeCommand.Frames"/> frames and records its lifecycle into <see cref="ProbeCommand.Log"/>
+    /// and the delta of every tick into <see cref="ProbeCommand.Deltas"/>.
     /// </summary>
-    public class ProbeProcessor : ICommandProcessor<ProbeCommand>
+    public class ProbeProcessor : IStatefulCommandProcessor<ProbeCommand>
     {
         private ProbeCommand _command;
         private int _remaining;
+        private bool _isStartTick;
 
-        public CommandStatus Start(ProbeCommand command)
+        public void Start(ProbeCommand command)
         {
             _command = command;
             _remaining = command.Frames;
+            _isStartTick = true;
             command.Processors?.Add(this);
             Write("start");
 
@@ -42,12 +47,19 @@ namespace Pragma.CommandExecutor.Tests
             {
                 throw new InvalidOperationException(command.Name);
             }
-
-            return Evaluate();
         }
 
         public CommandStatus Tick(float deltaTime)
         {
+            _command.Deltas?.Add(deltaTime);
+
+            // The tick right after Start belongs to the start frame: Frames counts the frames after it.
+            if (_isStartTick)
+            {
+                _isStartTick = false;
+                return Evaluate();
+            }
+
             if (_command.ThrowOnTick)
             {
                 throw new InvalidOperationException(_command.Name);
@@ -84,21 +96,54 @@ namespace Pragma.CommandExecutor.Tests
     {
         public List<ICommandProcessor> Processors { get; set; }
 
+        /// <summary>
+        /// Invoked inside <see cref="StatelessProbeProcessor.Execute"/>, after the processor is recorded.
+        /// </summary>
+        public Action OnExecute { get; set; }
+
         public void Reset()
         {
             Processors = null;
+            OnExecute = null;
         }
     }
 
     /// <summary>
-    /// Records the processor instance that served the run and completes on the first tick.
+    /// Records the processor instance that served the run.
     /// </summary>
-    public class StatelessProbeProcessor : ICommandProcessor<StatelessProbeCommand>, IStatelessCommandProcessor
+    public class StatelessProbeProcessor : IStatelessCommandProcessor<StatelessProbeCommand>
     {
-        public CommandStatus Start(StatelessProbeCommand command)
+        public void Execute(StatelessProbeCommand command)
         {
             command.Processors.Add(this);
-            return CommandStatus.Running;
+            command.OnExecute?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Implements neither processor contract.
+    /// </summary>
+    public class ContractlessProcessor : ICommandProcessor<ProbeCommand>
+    {
+    }
+
+    /// <summary>
+    /// Implements both processor contracts.
+    /// </summary>
+    public class AmbiguousProcessor : IStatelessCommandProcessor<ProbeCommand>, IStatefulCommandProcessor<ProbeCommand>
+    {
+        public void Execute(ProbeCommand command)
+        {
+        }
+
+        public void Start(ProbeCommand command)
+        {
+        }
+
+        public CommandStatus Tick(float deltaTime) => CommandStatus.Completed;
+
+        public void Cleanup(bool interrupted)
+        {
         }
     }
 }

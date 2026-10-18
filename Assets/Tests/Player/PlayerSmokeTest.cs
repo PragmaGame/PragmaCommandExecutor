@@ -26,8 +26,8 @@ namespace Pragma.CommandExecutor.Tests
         // Deserialized from the scene: checks that [SerializeReference] children survive stripping.
         [SerializeField] private CommandGroup _serializedTree = new(GroupMode.Sequential, new List<ICommand>
         {
-            new MoveCommand { From = Vector3.zero, To = Vector3.right, Duration = 0.05f },
-            new ScaleCommand { From = Vector3.one, To = Vector3.one * 0.5f, Duration = 0.05f },
+            Lerp<MoveCommand>(Vector3.zero, Vector3.right, 0.05f),
+            Lerp<ScaleCommand>(Vector3.one, Vector3.one * 0.5f, 0.05f),
             new DelayCommand { Duration = 0.05f },
             new LogCommand { Message = "[Smoke] serialized tree log command" },
         });
@@ -281,6 +281,16 @@ namespace Pragma.CommandExecutor.Tests
         {
             return (a - b).sqrMagnitude < 1e-6f;
         }
+
+        private static TCommand Lerp<TCommand>(Vector3 from, Vector3 to, float duration)
+            where TCommand : LerpCommand<Transform, Vector3>, new()
+        {
+            var command = new TCommand();
+            command.Data.From = from;
+            command.Data.To = to;
+            command.Data.Duration = duration;
+            return command;
+        }
     }
 
     /// <summary>
@@ -296,14 +306,13 @@ namespace Pragma.CommandExecutor.Tests
         }
     }
 
-    public class SmokeCommandProcessor : ICommandProcessor<SmokeCommand>
+    public class SmokeCommandProcessor : IStatefulCommandProcessor<SmokeCommand>
     {
         private int _remaining;
 
-        public CommandStatus Start(SmokeCommand command)
+        public void Start(SmokeCommand command)
         {
             _remaining = command.Frames;
-            return Tick(0f);
         }
 
         public CommandStatus Tick(float deltaTime)

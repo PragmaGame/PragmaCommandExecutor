@@ -21,14 +21,13 @@ namespace Pragma.CommandExecutor.Examples
     /// A running processor: it remembers the condition between frames, so it is pooled per run
     /// (one instance per concurrently running command) instead of being stateless.
     /// </summary>
-    public class WaitUntilCommandProcessor : ICommandProcessor<WaitUntilCommand>
+    public class WaitUntilCommandProcessor : IStatefulCommandProcessor<WaitUntilCommand>
     {
         private Func<bool> _condition;
 
-        public CommandStatus Start(WaitUntilCommand command)
+        public void Start(WaitUntilCommand command)
         {
             _condition = command.Condition;
-            return Tick(0f);
         }
 
         public CommandStatus Tick(float deltaTime)

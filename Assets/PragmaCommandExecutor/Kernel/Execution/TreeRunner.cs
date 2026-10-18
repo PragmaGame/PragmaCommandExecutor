@@ -58,10 +58,11 @@ namespace Pragma.CommandExecutor
             try
             {
                 _root = command != null
-                    ? _executor.CreateNode(command, this)
+                    ? _executor.CreateNodeOrExecute(command, this)
                     : _executor.CreateGroupNode(commands, mode, 0, this);
 
-                status = _root.Start();
+                // A root without a node was executed by its stateless processor.
+                status = _root != null ? _root.Start() : CommandStatus.Completed;
             }
             catch (Exception exception)
             {

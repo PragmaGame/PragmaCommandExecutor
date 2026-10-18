@@ -318,29 +318,35 @@ MonoBehaviour:
     - rid: 6584675499845615690
       type: {class: MoveCommand, ns: Pragma.CommandExecutor.Examples, asm: Pragma.CommandExecutor.Examples}
       data:
-        <Context>k__BackingField: {fileID: 413292312}
-        <From>k__BackingField: {x: 0, y: 0, z: 0}
-        <To>k__BackingField: {x: 1, y: 0, z: 0}
-        <Duration>k__BackingField: 0.05
-        <Curve>k__BackingField:
-          serializedVersion: 2
-          m_Curve: []
-          m_PreInfinity: 2
-          m_PostInfinity: 2
-          m_RotationOrder: 4
+        _context: {fileID: 413292312}
+        _isUsePreset: 0
+        _data:
+          <From>k__BackingField: {x: 0, y: 0, z: 0}
+          <To>k__BackingField: {x: 1, y: 0, z: 0}
+          <Duration>k__BackingField: 0.05
+          <Curve>k__BackingField:
+            serializedVersion: 2
+            m_Curve: []
+            m_PreInfinity: 2
+            m_PostInfinity: 2
+            m_RotationOrder: 4
+        _preset: {fileID: 0}
     - rid: 6584675499845615691
       type: {class: ScaleCommand, ns: Pragma.CommandExecutor, asm: Pragma.CommandExecutor}
       data:
-        <Context>k__BackingField: {fileID: 413292312}
-        <From>k__BackingField: {x: 1, y: 1, z: 1}
-        <To>k__BackingField: {x: 0.5, y: 0.5, z: 0.5}
-        <Duration>k__BackingField: 0.05
-        <Curve>k__BackingField:
-          serializedVersion: 2
-          m_Curve: []
-          m_PreInfinity: 2
-          m_PostInfinity: 2
-          m_RotationOrder: 4
+        _context: {fileID: 413292312}
+        _isUsePreset: 0
+        _data:
+          <From>k__BackingField: {x: 1, y: 1, z: 1}
+          <To>k__BackingField: {x: 0.5, y: 0.5, z: 0.5}
+          <Duration>k__BackingField: 0.05
+          <Curve>k__BackingField:
+            serializedVersion: 2
+            m_Curve: []
+            m_PreInfinity: 2
+            m_PostInfinity: 2
+            m_RotationOrder: 4
+        _preset: {fileID: 0}
     - rid: 6584675499845615692
       type: {class: DelayCommand, ns: Pragma.CommandExecutor, asm: Pragma.CommandExecutor}
       data:

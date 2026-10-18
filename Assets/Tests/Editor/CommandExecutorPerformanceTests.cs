@@ -35,7 +35,7 @@ namespace Pragma.CommandExecutor.Tests
             _executor = new CommandExecutor(
                 null,
                 new ICommandRegistrationContext[] { new DefaultCommandRegistrationContext() },
-                autoTick: false);
+                new CommandExecutorSettings { IsAutoTicked = false });
 
             _done = () => _completed++;
             _completed = 0;

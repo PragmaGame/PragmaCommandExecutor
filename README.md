@@ -22,6 +22,7 @@ executor.GetBuilder(GroupMode.Sequential)
 - [Concepts](#concepts)
 - [Building and running trees](#building-and-running-trees)
 - [Timing](#timing)
+- [Executor settings](#executor-settings)
 - [Handles, results and errors](#handles-results-and-errors)
 - [Custom commands](#custom-commands)
 - [Registration](#registration)
@@ -37,8 +38,12 @@ executor.GetBuilder(GroupMode.Sequential)
 ## Features
 
 - **Sequential and parallel groups** nested to any depth; a group can repeat N times or forever.
-- **Custom commands in a few lines:** a data class and a processor with `Start` / `Tick` / `Cleanup`.
-- **One global tick** at the beginning of the player loop `Update` phase ticks every executor.
+- **Custom commands in a few lines:** a data class and a processor — `Execute` for an instant command,
+  `Start` / `Tick` / `Cleanup` for one that runs over several frames.
+- **One global tick per player loop phase:** `Update` by default, or any other phase; scaled or unscaled time, or
+  ticked manually.
+- **Shared settings through presets:** a command keeps its target in `Context` and its settings in `Data`, which can
+  come from a `ScriptableObject` preset shared by many commands.
 - **Pooled everything:** commands, processors, runtime nodes and runs. Ticking, executing prebuilt trees and building
   trees with the builder make no GC allocations once the pools are warm — enforced by the test suite.
 - **Versioned handles** to cancel a run and to get its `CommandResult` (`Completed`, `Cancelled`, `Faulted`).
@@ -112,10 +117,12 @@ public class Door : MonoBehaviour
 
 | Type | Role |
 |------|------|
-| `ICommand` | A command: plain data describing *what* to do (`DelayCommand.Duration`, `ScaleCommand.To`…). `Reset()` clears it before it goes back to the pool. |
-| `ICommandProcessor<TCommand>` | Does the work of one command instance for one run: `Start`, then `Tick` every frame while it reports `Running`, then `Cleanup`. |
+| `ICommand` | A command: plain data describing *what* to do (`DelayCommand.Duration`, `ScaleCommand.Data.To`…). `Reset()` clears it before it goes back to the pool. |
+| `Command<TContext, TData>` | Base of a command split into a target (`Context`) and settings (`Data`), stored inline or taken from a `CommandPresetConfig<TData>` asset. |
+| `IStatelessCommandProcessor<TCommand>` | Runs an instant command: `Execute` does all the work. One instance serves every run. |
+| `IStatefulCommandProcessor<TCommand>` | Runs a command over frames: `Start`, `Tick` every frame while it reports `Running`, then `Cleanup`. Pooled, one instance per running command. |
 | `CommandGroup` | A command holding other commands, run in a `GroupMode` (`Sequential` or `Parallel`), optionally `Repeat`ed. |
-| `CommandExecutor` | Owns the registrations (command type → processor type), the pools and the running trees; ticked by the player loop. |
+| `CommandExecutor` | Owns the registrations (command type → processor type), the pools and the running trees; ticked by the player loop or manually, as its `CommandExecutorSettings` say. |
 | `CommandBuilder` | Fluent API that rents pooled commands and assembles a tree. |
 | `CommandHandle` | A versioned reference to a run: `IsRunning`, `Cancel()`, `OnFinished(callback)`. |
 
@@ -189,7 +196,7 @@ so a tree can be a serialized field and tweaked in the inspector:
 ```csharp
 [SerializeField] private CommandGroup _intro = new(GroupMode.Sequential, new List<ICommand>
 {
-    new ScaleCommand { From = Vector3.zero, To = Vector3.one, Duration = 0.3f },
+    new ScaleCommand(),
     new DelayCommand { Duration = 0.5f },
     new LogCommand { Message = "Intro finished" },
 });
@@ -197,21 +204,50 @@ so a tree can be a serialized field and tweaked in the inspector:
 private void Start() => _executor.Execute(_intro); // the component keeps ownership of the tree
 ```
 
+A command derived from `Command<TContext, TData>` (`ScaleCommand`, any `LerpCommand`) shows its `Context`, an
+*Is Use Preset* toggle and either its own data or a preset field: tick it to take the data from a shared
+`CommandPresetConfig<TData>` asset, such as a `LerpVector3PresetConfig`
+(*Assets → Create → Pragma → Command Executor → Lerp Vector3 Preset*).
+
 The package has no inspector UI for adding new elements of a chosen type to a `[SerializeReference]` list: fill
 the tree in code (as above) or use a type picker attribute from another package. Serialized data refers to command
 types by class, namespace and assembly name, so renaming them breaks existing data.
 
 ## Timing
 
-- The global tick runs at the beginning of the `Update` phase of the player loop, before `MonoBehaviour.Update`,
-  and passes `Time.deltaTime` (scaled time: a zero `Time.timeScale` pauses delays and lerps).
+- By default the global tick runs at the beginning of the `Update` phase of the player loop, before
+  `MonoBehaviour.Update`, and passes `Time.deltaTime` (scaled time: a zero `Time.timeScale` pauses delays and
+  lerps). See [Executor settings](#executor-settings) for other phases, unscaled time and manual ticking.
 - `Execute` is synchronous: commands at the head of the tree start inside the call, and instant ones
   (callbacks, logs, zero durations) also complete there. When the whole tree is instant, `Execute` returns an
   already finished handle.
-- A command started during a frame receives its first `Tick` on the next frame. When a sequence advances, the next
-  command starts in the same frame in which the previous one completed.
+- A stateful command takes its first step in the frame it starts: `Start`, then `Tick(0)` right away. Its next
+  `Tick` comes on the next frame. When a sequence advances, the next command starts in the same frame in which the
+  previous one completed.
 - Runs started while the executor is ticking (from a callback, for example) are first ticked on the next frame.
 - An executor created during the global tick is first ticked on the next frame.
+
+## Executor settings
+
+`CommandExecutorSettings` is read once by the constructor; changing it afterwards does not affect the executor.
+
+```csharp
+var executor = new CommandExecutor(null, contexts, new CommandExecutorSettings
+{
+    IsAutoTicked = true,                          // false: only executor.Tick(deltaTime) advances the runs
+    TimeMode = CommandTimeMode.Unscaled,          // keeps running while Time.timeScale is 0 (pause menus)
+    UpdatePhase = CommandUpdatePhase.PreLateUpdate,
+});
+```
+
+| Setting | Values |
+|---------|--------|
+| `IsAutoTicked` | `true` (default) — ticked by the player loop until disposed; `false` — ticked only by the public `Tick(deltaTime)`, which throws on an auto-ticked executor. |
+| `TimeMode` | `Scaled` (default, `Time.deltaTime`) or `Unscaled` (`Time.unscaledDeltaTime`). |
+| `UpdatePhase` | `EarlyUpdate`, `FixedUpdate` (once per fixed step, with the fixed time step), `PreUpdate`, `Update` (default), `PreLateUpdate`, `PostLateUpdate`: the executor is ticked at the beginning of that phase. |
+
+`settings` is optional; the constructor is the only one, so DI containers find it. VContainer ignores default
+parameter values: register a `CommandExecutorSettings` instance (`builder.RegisterInstance(new CommandExecutorSettings())`).
 
 ## Handles, results and errors
 
@@ -244,7 +280,41 @@ handle.OnFinished(result =>        // invoked once; right away with Completed if
 
 ## Custom commands
 
-A command is a data class with a parameterless constructor and a `Reset` that restores the defaults:
+A command is a data class with a parameterless constructor and a `Reset` that restores the defaults; its processor
+implements exactly one of two contracts:
+
+- `IStatelessCommandProcessor<TCommand>` for an **instant** command: `Execute(command)` does all the work and the
+  command completes inside it. One instance serves every run, concurrent and nested ones included, and the executor
+  needs no runtime node for the command.
+- `IStatefulCommandProcessor<TCommand>` for a command that **runs over frames**: `Start`, `Tick`, `Cleanup`. It is
+  pooled per run.
+
+Registering a processor that implements neither or both throws.
+
+```csharp
+[Serializable]
+public class SetActiveCommand : ICommand
+{
+    [field: SerializeField] public GameObject Target { get; set; }
+    [field: SerializeField] public bool IsActive { get; set; }
+
+    public void Reset()
+    {
+        Target = null;
+        IsActive = false;
+    }
+}
+
+public class SetActiveCommandProcessor : IStatelessCommandProcessor<SetActiveCommand>
+{
+    public void Execute(SetActiveCommand command)
+    {
+        command.Target.SetActive(command.IsActive);
+    }
+}
+```
+
+A command that runs over frames:
 
 ```csharp
 [Serializable]
@@ -266,20 +336,17 @@ public class MoveCommand : ICommand
 Its processor runs one instance of it:
 
 ```csharp
-public class MoveCommandProcessor : ICommandProcessor<MoveCommand>
+public class MoveCommandProcessor : IStatefulCommandProcessor<MoveCommand>
 {
     private MoveCommand _command;
     private Vector3 _from;
     private float _elapsed;
 
-    public CommandStatus Start(MoveCommand command)
+    public void Start(MoveCommand command)
     {
         _command = command;
         _from = command.Target.position;
         _elapsed = 0f;
-
-        // Performs the first step now; the logic stays in Tick.
-        return Tick(0f);
     }
 
     public CommandStatus Tick(float deltaTime)
@@ -300,32 +367,55 @@ public class MoveCommandProcessor : ICommandProcessor<MoveCommand>
 
 The lifecycle of one run:
 
-1. `Start(command)` performs the first step. An instant command does all its work here and returns
-   `CommandStatus.Completed`; `Tick` and `Cleanup` then keep their default implementations and can be omitted.
-2. `Tick(deltaTime)` is called once per frame, starting with the next frame, while the processor returns
-   `CommandStatus.Running`.
+1. `Start(command)` begins the run: keep what the ticks need, perform the one-off actions (read the starting value,
+   play a sound).
+2. `Tick(deltaTime)` follows right away in the same frame with `deltaTime` 0 — a command that turns out to be done
+   completes there — and then once per frame while the processor returns `CommandStatus.Running`.
 3. `Cleanup(interrupted)` is called exactly once, right before the processor goes back to the pool — also when
    `Start` or `Tick` threw. `interrupted` is `true` when the run was cancelled or faulted while this processor was
    still running: stop sounds, kill tweens, cancel requests here. Exceptions thrown from `Cleanup` are logged.
 
-Processors are pooled per registration: one instance per concurrently running command, reused afterwards, so keep
-all per-run state in fields and reset it in `Start` or `Cleanup`. A processor that keeps no per-run state can
-implement `IStatelessCommandProcessor`: a single instance then serves every run, including concurrent ones.
+Stateful processors are pooled per registration: one instance per concurrently running command, reused afterwards,
+so keep all per-run state in fields and reset it in `Start` or `Cleanup`.
+
+### Context, data and presets
+
+`Command<TContext, TData>` splits a command into what it acts on and how. `Context` is set per use; `Data` is the
+command's own `[Serializable]` object, or the data of a `CommandPresetConfig<TData>` asset shared by many commands
+(`UsePreset(preset)` in code, *Is Use Preset* in the inspector):
 
 ```csharp
-public class SetActiveCommandProcessor : ICommandProcessor<SetActiveCommand>, IStatelessCommandProcessor
+[Serializable]
+public class ShakeData
 {
-    public CommandStatus Start(SetActiveCommand command)
+    [field: SerializeField] public float Strength { get; set; } = 1f;
+    [field: SerializeField] public float Duration { get; set; } = 0.3f;
+}
+
+[Serializable]
+public class ShakeCommand : Command<Transform, ShakeData>
+{
+    // Pooled commands are reset on release: reset the data in place instead of allocating a new object.
+    protected override void OnResetData()
     {
-        command.Target.SetActive(command.IsActive);
-        return CommandStatus.Completed;
+        Data.Strength = 1f;
+        Data.Duration = 0.3f;
     }
+}
+
+[CreateAssetMenu(menuName = "Game/Shake Preset")]
+public class ShakePresetConfig : CommandPresetConfig<ShakeData>
+{
 }
 ```
 
-For interpolations, derive from `LerpCommand<TValue>` and `LerpCommandProcessor<TCommand, TValue>`: they provide
-`Context`, `From`, `To`, `Duration` and an optional easing `Curve` (`null` or a curve without keys means linear),
-and you only implement `Lerp` and `Apply` — see `ScaleCommand`.
+A preset is shared, not copied: changing it changes every command that uses it, and releasing a command never resets
+it. A command set to use a preset that is missing faults its run.
+
+For interpolations, derive from `LerpCommand<TContext, TValue>` and `LerpCommandProcessor<TCommand, TContext, TValue>`:
+the data is a `LerpData<TValue>` with `From`, `To`, `Duration` and an optional easing `Curve` (`null` or a curve
+without keys means linear), and you only implement `Lerp` and `Apply` — see `ScaleCommand`. `LerpVector3PresetConfig`
+is a ready preset for every `Vector3` lerp.
 
 A builder shortcut is an extension method over `Join(out command)`:
 
@@ -365,7 +455,8 @@ executor.AddRegistration<MoveCommand, FastMoveCommandProcessor>(); // replaces t
 ```
 
 Registering the same pair again keeps its pool; registering another processor replaces the pool, and runs that
-still hold an old processor return it to the old pool.
+still hold an old processor return it to the old pool. A processor must implement exactly one of
+`IStatelessCommandProcessor<TCommand>` and `IStatefulCommandProcessor<TCommand>`, otherwise `AddRegistration` throws.
 
 ## Object factory and dependency injection
 
@@ -408,13 +499,14 @@ await handle.ToUniTask(cancellationToken);
 ```
 
 - Cancelling the token cancels the run. A cancelled run completes the `await` **normally**, so check the token after
-  awaiting when the rest of the method must not run.
+  awaiting when the rest of the method must not run. An already cancelled token runs nothing: the builder overload
+  releases the built tree without executing even its instant head.
 - A faulted run rethrows its exception from `await`, and the executor does not log it again. One exception: a fault
   that happens synchronously inside `Execute` (for example a missing registration) occurs before the await is
   attached, so it is only logged.
 - `AsyncCommandProcessor<TCommand>` adapts a processor written as an `async UniTask` method. The task is polled every
-  frame, its completion is observed on the frame after it finishes, and its token is cancelled when the run is
-  interrupted.
+  frame, the first time in the start frame; its completion is observed on the frame after it finishes, and its token
+  is cancelled when the run is interrupted.
 
 ```csharp
 public class LoadLevelCommandProcessor : AsyncCommandProcessor<LoadLevelCommand>
@@ -462,8 +554,8 @@ Unity's Mono and IL2CPP runtimes are slower than .NET 8 and the Editor slower st
 To profile inside Unity run the `Performance` category tests and open *Window → Analysis → Performance Test Report*.
 
 Tips: prebuild trees that run often (`Build()` once, `Execute` many times); prefer `Join(out command)` and
-static lambdas to closures; implement `IStatelessCommandProcessor` for processors without per-run state; implement
-`Tick` and `Cleanup` in running processors instead of relying on the interface defaults.
+static lambdas to closures; make instant commands stateless (`IStatelessCommandProcessor<TCommand>`): they need no
+runtime node and no pooled processor.
 
 ## Examples
 
@@ -485,12 +577,13 @@ builder shortcuts.
 
 ## Package layout
 
-- `Kernel` — everything the executor needs: commands and groups, the executor and its builder, handles and results,
-  processor contracts, the object factory and the internal runtime (`TreeRunner`, nodes, pools, the player loop
-  hook). It does not depend on `Essentials`.
-- `Essentials` — content on top of the kernel: the default commands with their builder shortcuts, the singleton and
-  the optional UniTask integration (its own assembly).
-- `Editor` — the link.xml generator.
+- `Kernel` — everything the executor needs: commands and groups, the `Command<TContext, TData>` base with its
+  presets (`Data/`), the executor with its settings and builder, handles and results, processor contracts, the
+  object factory and the internal runtime (`TreeRunner`, nodes, pools, the player loop hook). It does not depend on
+  `Essentials`.
+- `Essentials` — content on top of the kernel: the default commands with their builder shortcuts and presets, the
+  singleton and the optional UniTask integration (its own assembly).
+- `Editor` — the link.xml generator and the inspector drawers.
 
 All folders share the `Pragma.CommandExecutor` namespace.
 
@@ -499,6 +592,7 @@ All folders share the `Pragma.CommandExecutor` namespace.
 This repository is a Unity project: the package is `Assets/PragmaCommandExecutor`.
 
 - `Assets/Tests/Editor` — EditMode tests: functional, UniTask and performance/zero-allocation (category `Performance`).
+- `Assets/Tests/PlayMode` — PlayMode tests of auto-ticked executors in the real player loop: phases, unscaled time.
 - `Assets/Tests/Player` — a player smoke test for code stripping: *Tools → Pragma Command Executor → Build Player
   Smoke Test (High Stripping)* builds it for the active platform; the player reports `[Smoke] PASS/FAIL` on screen
   and in its log.

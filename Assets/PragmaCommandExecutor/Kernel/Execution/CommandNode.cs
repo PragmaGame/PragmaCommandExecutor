@@ -28,27 +28,34 @@ namespace Pragma.CommandExecutor
         public abstract void Release(bool interrupted);
     }
 
+    /// <summary>
+    /// Runs one command on a pooled <see cref="IStatefulCommandProcessor"/>. Commands of stateless processors need
+    /// no node: <see cref="CommandExecutor.CreateNodeOrExecute"/> executes them.
+    /// </summary>
     internal sealed class ProcessorNode : CommandNode
     {
         private ICommand _command;
         private ProcessorPool _processorPool;
-        private ICommandProcessor _processor;
+        private IStatefulCommandProcessor _processor;
 
         public ProcessorNode(CommandExecutor executor) : base(executor)
         {
         }
 
-        public void Setup(TreeRunner runner, ICommand command)
+        public void Setup(TreeRunner runner, ICommand command, ProcessorPool processorPool)
         {
             Runner = runner;
             _command = command;
+            _processorPool = processorPool;
         }
 
         public override CommandStatus Start()
         {
-            _processorPool = Executor.GetProcessorPool(_command);
             _processor = Executor.RentProcessor(_processorPool);
-            return _processor.Start(_command);
+            _processor.Start(_command);
+
+            // The first step belongs to the start frame, in which no time has passed yet.
+            return _processor.Tick(0f);
         }
 
         public override CommandStatus Tick(float deltaTime)
@@ -171,7 +178,7 @@ namespace Pragma.CommandExecutor
                     return CommandStatus.Running;
                 }
 
-                // A child started here only gets its first Tick on the next frame.
+                // A child started here has taken its start-frame step; the group ticks it again on the next frame.
                 if (StartChild(_commands[_cursor++]) == CommandStatus.Running)
                 {
                     return CommandStatus.Running;
@@ -247,7 +254,14 @@ namespace Pragma.CommandExecutor
 
         private CommandStatus StartChild(ICommand command)
         {
-            var node = Executor.CreateNode(command, Runner);
+            var node = Executor.CreateNodeOrExecute(command, Runner);
+
+            // Executed by its stateless processor: already completed.
+            if (node == null)
+            {
+                return CommandStatus.Completed;
+            }
+
             CommandStatus status;
 
             try

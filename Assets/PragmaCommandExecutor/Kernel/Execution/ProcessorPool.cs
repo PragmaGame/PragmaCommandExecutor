@@ -4,41 +4,35 @@ using System.Collections.Generic;
 namespace Pragma.CommandExecutor
 {
     /// <summary>
-    /// Processors of one command registration: pooled per-run instances,
+    /// Processors of one command registration: pooled per-run instances of an <see cref="IStatefulCommandProcessor"/>,
     /// or the single shared instance of an <see cref="IStatelessCommandProcessor"/>.
     /// </summary>
     internal sealed class ProcessorPool
     {
-        private readonly Stack<ICommandProcessor> _instances = new();
-        private ICommandProcessor _shared;
+        private readonly Stack<IStatefulCommandProcessor> _instances = new();
 
         public Type ProcessorType { get; }
+        public bool IsStateless { get; }
 
-        public ProcessorPool(Type processorType)
+        /// <summary>
+        /// The instance of a stateless registration, created on first use.
+        /// </summary>
+        public IStatelessCommandProcessor Shared { get; set; }
+
+        public ProcessorPool(Type processorType, bool isStateless)
         {
             ProcessorType = processorType;
+            IsStateless = isStateless;
         }
 
-        public bool TryRent(out ICommandProcessor processor)
+        public bool TryRent(out IStatefulCommandProcessor processor)
         {
-            processor = _shared;
-            return processor != null || _instances.TryPop(out processor);
+            return _instances.TryPop(out processor);
         }
 
-        public void OnCreated(ICommandProcessor processor)
+        public void Release(IStatefulCommandProcessor processor)
         {
-            if (processor is IStatelessCommandProcessor)
-            {
-                _shared = processor;
-            }
-        }
-
-        public void Release(ICommandProcessor processor)
-        {
-            if (!ReferenceEquals(processor, _shared))
-            {
-                _instances.Push(processor);
-            }
+            _instances.Push(processor);
         }
     }
 }
