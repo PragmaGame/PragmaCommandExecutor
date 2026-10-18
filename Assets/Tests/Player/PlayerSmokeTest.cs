@@ -23,6 +23,9 @@ namespace Pragma.CommandExecutor.Tests
         [SerializeField] private Transform _target;
         [SerializeField] private GameObject _toggled;
 
+        // Imported from Examples/Presets/Pulse.commandtree: checks that [SerializeReference] tree nodes survive stripping.
+        [SerializeField] private CommandTreePreset _treePreset;
+
         // Deserialized from the scene: checks that [SerializeReference] children survive stripping.
         [SerializeField] private CommandGroup _serializedTree = new(GroupMode.Sequential, new List<ICommand>
         {
@@ -52,6 +55,7 @@ namespace Pragma.CommandExecutor.Tests
             yield return ExampleCommands();
             yield return GenericRegistration();
             yield return SerializedTree();
+            yield return TreePreset();
             yield return Repeat();
             yield return Cancel();
             yield return Fault();
@@ -130,6 +134,23 @@ namespace Pragma.CommandExecutor.Tests
                       && !_serializedTree.Commands.Contains(null)
                       && Approximately(_target.localPosition, Vector3.right)
                       && Approximately(_target.localScale, Vector3.one * 0.5f));
+        }
+
+        private IEnumerator TreePreset()
+        {
+            var pulses = 0;
+            ResetTarget();
+
+            var args = new Dictionary<string, object>
+            {
+                ["target"] = _target,
+                ["done"] = (Action)(() => pulses++),
+            };
+
+            // Pulse scales the target up and back twice and calls "done" at the end of each pass.
+            return Run("Tree preset imported from a graph", () => _executor.ExecuteAndRelease(_treePreset.Build(args)),
+                CommandResult.Completed,
+                () => pulses == 2 && Approximately(_target.localScale, Vector3.one));
         }
 
         private IEnumerator Repeat()

@@ -85,7 +85,7 @@ implementing `ICommandProcessor`, `ICommand` or `ICommandTreePresetNode` in the 
 preserves the package assemblies.
 After changing anything reflection related, build the player smoke test (below) and make sure it passes, or at
 least compare the stripped assemblies in `Library/Bee/artifacts/<Platform>/ManagedStripped` with
-`Library/Bee/PlayerScriptAssemblies`.
+`Library/Bee/PlayerScriptAssemblies` (`.claude/skills/unity-verify/scripts/strip-check.sh`; the skill lists the steps).
 
 ## Style
 
