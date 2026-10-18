@@ -1,0 +1,26 @@
+{
+    "name": "Pragma.CommandExecutor.GraphToolkit.Editor.Tests",
+    "rootNamespace": "Pragma.CommandExecutor.Tests",
+    "references": [
+        "Pragma.CommandExecutor",
+        "Pragma.CommandExecutor.GraphToolkit.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "UNITY_6000_6_OR_NEWER"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

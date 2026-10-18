@@ -12,13 +12,13 @@ using UnityEditor.UnityLinker;
 namespace Pragma.CommandExecutor
 {
     /// <summary>
-    /// Generates a link.xml for every player build that keeps all command and processor types whole, including the
-    /// ones declared in user assemblies:
+    /// Generates a link.xml for every player build that keeps all command, processor and tree preset node types whole,
+    /// including the ones declared in user assemblies:
     /// <list type="bullet">
     /// <item>processors are created by reflection from the registered types, so their constructors look unused to the
     /// linker, and Medium or High stripping removes them together with the rest of the never instantiated type;</item>
-    /// <item>command types may be referenced only from serialized data that the build does not scan
-    /// (asset bundles, Addressables).</item>
+    /// <item>command and tree preset node types may be referenced only from serialized data that the build does not
+    /// scan (asset bundles, Addressables).</item>
     /// </list>
     /// </summary>
     internal sealed class CommandExecutorLinkerProcessor : IUnityLinkerProcessor
@@ -37,6 +37,7 @@ namespace Pragma.CommandExecutor
 
             var assemblies = TypeCache.GetTypesDerivedFrom<ICommandProcessor>()
                 .Concat(TypeCache.GetTypesDerivedFrom<ICommand>())
+                .Concat(TypeCache.GetTypesDerivedFrom<ICommandTreePresetNode>())
                 .Where(type => !type.IsInterface && !editorAssemblies.Contains(type.Assembly.GetName().Name))
                 .GroupBy(type => type.Assembly.GetName().Name)
                 .OrderBy(assembly => assembly.Key, StringComparer.Ordinal);

@@ -16,10 +16,12 @@ The package is pre-1.0: backward compatibility is not required yet, prefer clean
 | Path | Contents |
 |------|----------|
 | `Assets/PragmaCommandExecutor/Kernel` | Everything the executor needs: `ICommand`, `CommandGroup`, `GroupMode`, `CommandExecutor` with `CommandExecutorSettings`, `CommandBuilder`, `CommandHandle`, `CommandResult`, `Command<TContext, TData>` and `CommandPresetConfig<TData>` (`Data/`), processor contracts (`Processors/`), `IObjectFactory` (`Factory/`), and the internal runtime (`Execution/`: `TreeRunner`, `CommandNode`, `ProcessorPool`, `CommandExecutorPlayerLoop`). |
-| `Assets/PragmaCommandExecutor/Essentials` | Content on top of the kernel: default commands (`Commands/`), builder shortcuts, `CommandExecutor.Singleton`, the optional UniTask integration (`UniTask/`, own asmdef). |
-| `Assets/PragmaCommandExecutor/Editor` | Editor-only code shipped with the package: `CommandExecutorLinkerProcessor` (generated link.xml), inspector drawers (`ShowIfDrawer`). |
+| `Assets/PragmaCommandExecutor/Essentials` | Content on top of the kernel: default commands (`Commands/`), builder shortcuts, tree presets (`TreePresets/`: `CommandTreePreset`, keys, `ICommandTreePresetNode` and the nodes of the default commands), `CommandExecutor.Singleton`, the optional UniTask integration (`UniTask/`, own asmdef). |
+| `Assets/PragmaCommandExecutor/Editor` | Editor-only code shipped with the package: `CommandExecutorLinkerProcessor` (generated link.xml), inspector drawers (`ShowIfDrawer`, `CommandTreePresetKeyDrawer`). |
+| `Assets/PragmaCommandExecutor/Editor/GraphToolkit` | Tree preset graphs (`.commandtree`): graph and node types, `TreeNodeSchema` (ports from serialized fields), converter and builder between graphs and trees, the importer, *Open in Graph Toolkit* for `.asset` presets. Own asmdef, compiled only on `UNITY_6000_6_OR_NEWER`. |
 | `Assets/PragmaCommandExecutor/link.xml` | Keeps the package assemblies whole under managed code stripping. |
 | `Assets/Tests/Editor` | EditMode tests: functional (`CommandExecutorTests`), UniTask (`CommandExecutorUniTaskTests`), performance and zero-allocation (`CommandExecutorPerformanceTests`, category `Performance`). |
+| `Assets/Tests/Editor/GraphToolkit` | EditMode tests of tree preset graphs (own asmdef, `UNITY_6000_6_OR_NEWER`); they create and delete assets under `Assets/CommandTreeGraph*Tests`. |
 | `Assets/Tests/PlayMode` | PlayMode tests of auto-ticked executors in the real player loop (`CommandExecutorPlayerLoopTests`): phases, unscaled time, manual ticking. |
 | `Assets/Tests/Player` | Player smoke test (`PlayerSmokeTest` scene + script) and its build menu item for checking code stripping. |
 | `Assets/Examples` | Example scene and scripts; they double as the "user code" that the stripping checks run against. |
@@ -50,6 +52,10 @@ The package is pre-1.0: backward compatibility is not required yet, prefer clean
 - **Command data:** `Command<TContext, TData>.Reset` drops the preset before `OnResetData`, so resetting a pooled
   command never touches a shared preset. Commands with class data reset it in place (`LerpCommand`) to stay
   allocation free.
+- **Tree presets are never changed by `Build`:** every build creates new commands with copied data
+  (`CommandTreePresetReflection.CloneData`), so a built tree may be released to the pools. Graph node types,
+  tree node types and their field names are serialized into `.commandtree` graphs and preset assets: renaming them
+  breaks existing graphs like renaming a command breaks scenes.
 - **Zero GC allocations on the hot paths** once pools are warm: ticking, executing prebuilt trees and building trees
   with `CommandBuilder`. `CommandExecutorPerformanceTests` enforces it with `Is.Not.AllocatingGCMemory()`.
   Unity's Mono BCL allocates where .NET does not — e.g. `HashSet<T>.UnionWith(IEnumerable<T>)` boxes the enumerator —
@@ -73,7 +79,8 @@ Performance is a primary goal. For any change on the hot path (`TreeRunner`, `Co
 
 Processors are created with `Activator.CreateInstance` from registered types, which the linker cannot see.
 `Editor/CommandExecutorLinkerProcessor.cs` generates a link.xml per build that preserves every non-interface type
-implementing `ICommandProcessor` or `ICommand` in the player assemblies; `link.xml` preserves the package assemblies.
+implementing `ICommandProcessor`, `ICommand` or `ICommandTreePresetNode` in the player assemblies; `link.xml`
+preserves the package assemblies.
 After changing anything reflection related, build the player smoke test (below) and make sure it passes, or at
 least compare the stripped assemblies in `Library/Bee/artifacts/<Platform>/ManagedStripped` with
 `Library/Bee/PlayerScriptAssemblies`.
@@ -103,6 +110,7 @@ unity --no-banner --json command console                                # compil
 unity --no-banner --json command --timeout 600 run_tests --mode editor --filter_type assembly --filter Pragma.CommandExecutor.Tests
 unity --no-banner --json command run_tests --mode playmode --filter_type assembly --filter Pragma.CommandExecutor.PlayModeTests --async_tests true
 unity --no-banner --json command test_status                            # play mode reloads the domain: poll, or read Temp/pipeline_test_status.json
+unity --no-banner --json command --timeout 600 run_tests --mode editor --filter_type assembly --filter Pragma.CommandExecutor.GraphToolkit.Editor.Tests
 unity --no-banner --json command run_script --file <file.cs> --entry Type.Method   # run editor C# without a domain reload
 ```
 

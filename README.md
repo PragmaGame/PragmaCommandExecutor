@@ -21,6 +21,7 @@ executor.GetBuilder(GroupMode.Sequential)
 - [Quick start](#quick-start)
 - [Concepts](#concepts)
 - [Building and running trees](#building-and-running-trees)
+- [Tree presets and graphs](#tree-presets-and-graphs)
 - [Timing](#timing)
 - [Executor settings](#executor-settings)
 - [Handles, results and errors](#handles-results-and-errors)
@@ -49,6 +50,8 @@ executor.GetBuilder(GroupMode.Sequential)
 - **Versioned handles** to cancel a run and to get its `CommandResult` (`Completed`, `Cancelled`, `Faulted`).
 - **Runs never throw:** an exception in a processor faults the run, interrupts what is still running and is logged.
 - **Serializable trees:** commands and groups are `[Serializable]` data with `[SerializeReference]` children.
+- **Tree presets edited as graphs:** a `CommandTreePreset` asset stores a tree with its targets replaced by keys and
+  builds it for any targets; on Unity 6000.6+ it is authored and edited in Graph Toolkit.
 - **Dependency injection friendly:** processors are created through an `IObjectFactory`.
 - **Optional UniTask integration:** awaitable handles, token overloads and `async` processors.
 - **Survives High managed code stripping,** including processors declared in your own assemblies.
@@ -70,7 +73,9 @@ or add it to `Packages/manifest.json`:
 Append `#<tag or commit>` to the URL to pin a version.
 
 Requirements: developed and tested with Unity 6000.6. The code needs C# 9 and default interface methods
-(Unity 2021.2 or newer). [UniTask](https://github.com/Cysharp/UniTask) is optional.
+(Unity 2021.2 or newer). Editing tree presets as graphs needs Unity 6000.6 or newer, where Graph Toolkit is part of
+the Editor; on older versions that assembly is simply not compiled. [UniTask](https://github.com/Cysharp/UniTask) is
+optional.
 
 ## Quick start
 
@@ -212,6 +217,76 @@ A command derived from `Command<TContext, TData>` (`ScaleCommand`, any `LerpComm
 The package has no inspector UI for adding new elements of a chosen type to a `[SerializeReference]` list: fill
 the tree in code (as above) or use a type picker attribute from another package. Serialized data refers to command
 types by class, namespace and assembly name, so renaming them breaks existing data.
+
+## Tree presets and graphs
+
+A `CommandTreePreset` is a command tree stored as an asset, with its targets replaced by string keys. `Build(args)`
+creates a new tree owned by the caller from a dictionary that maps each key to its target; the preset itself never
+changes, so one preset serves any number of objects.
+
+```csharp
+[SerializeField] private CommandTreePreset _pulse;
+private readonly Dictionary<string, object> _args = new();
+
+public void Pulse()
+{
+    _args["target"] = transform;
+    _args["done"] = (Action)OnPulsed;
+
+    // A new tree on every call: ExecuteAndRelease returns its commands to the pools when the run finishes.
+    _executor.ExecuteAndRelease(_pulse.Build(_args));
+}
+```
+
+- A missing key throws `KeyNotFoundException`, a value of another type `InvalidCastException`; a `null` value is
+  passed on as is. `GetRequiredKeys()` lists the keys with the types they expect.
+- Build a tree once and execute it many times when its targets do not change.
+
+### Authoring in Graph Toolkit (Unity 6000.6+)
+
+*Assets → Create → Pragma → Command Executor → Tree Preset Graph* creates a `.commandtree` graph, which imports as a
+`CommandTreePreset`: reference it like any other preset.
+
+- Command nodes are wired into the child ports of *Sequence* and *Parallel* groups and into the *Output* node. A group
+  sets the number of its child ports in its *Children* option, and *Repeat* like `CommandGroup.Repeat`.
+- A target port takes a graph **variable**: the variable name is the key, its type the type of the target
+  (`Transform`, `Action`…). A value port takes an inline value or a **constant** node.
+- The graph is validated while you edit it and on import: missing wires, unwired targets, a missing or second Output
+  node, cycles. A graph with errors imports as a preset without a root and logs the errors on the asset.
+
+A preset stored as a `.asset` (*Assets → Create → Pragma → Command Executor → Tree Preset*) opens in Graph Toolkit too:
+*Open in Graph Toolkit* in its Inspector header, in its context menu or under *Assets*. It builds a temporary
+`<Name> (editing).commandtree` graph next to the preset; saving the graph writes the tree into the preset, keeping the
+node objects whose type stays in place so that the asset diff shows only the change, and the graph is deleted once
+no window shows it. A tree the graph cannot show as it is (a node type without a graph node, a key used with two
+types, more than 32 children) is not opened.
+
+### Custom nodes
+
+A node is any `[Serializable]` `ICommandTreePresetNode`; `CommandTreeNode<TCommand, TContext, TData>` makes one for
+any `Command<TContext, TData>` in one line, with a `Target` key for the context and a copy of `Data` per build:
+
+```csharp
+[Serializable]
+public class ShakeTreeNode : CommandTreeNode<ShakeCommand, Transform, ShakeData>
+{
+}
+```
+
+To list it in the graph, declare its graph node in an Editor assembly that references
+`Pragma.CommandExecutor.GraphToolkit.Editor`:
+
+```csharp
+[Serializable, Node("Game", null, "Shake"), UseWithGraph(typeof(CommandTreeGraph))]
+public class ShakeGraphNode : TreeNodeGraphNode<ShakeTreeNode>
+{
+}
+```
+
+Every field Unity serializes on the node becomes a port: a `CommandTreePresetKey<T>` a target port, a node or a list
+of nodes link ports, nested `[Serializable]` data its fields (`Data_From`, shown as *From*), anything else a value
+port. Port names come from the field names, so renaming a field disconnects its wires like it loses its serialized
+value; renaming or moving a node type breaks the graphs and presets that use it.
 
 ## Timing
 
@@ -529,9 +604,10 @@ The package works with every managed stripping level, High included, without any
 
 - `link.xml` in the package keeps the package assemblies whole.
 - `Editor/CommandExecutorLinkerProcessor` generates an additional link.xml for every player build that keeps all
-  types implementing `ICommand` or `ICommandProcessor` in the player assemblies — **your own commands and processors
-  included**. Processors are created by reflection from the registered types, so without it High stripping removes
-  their constructors (and, for a type that is never instantiated in code, most of its methods).
+  types implementing `ICommand`, `ICommandProcessor` or `ICommandTreePresetNode` in the player assemblies — **your own
+  commands, processors and tree preset nodes included**. Processors are created by reflection from the registered
+  types, so without it High stripping removes their constructors (and, for a type that is never instantiated in code,
+  most of its methods); commands and nodes may be referenced only from serialized data.
 
 Verified on the stripped assemblies of an Android IL2CPP build with High stripping: nothing of the package, of the
 example commands or of the smoke test processors is removed. Your `IObjectFactory` and
@@ -570,6 +646,7 @@ play mode. Every example has Play / Cancel buttons:
 | Error handling | A throwing command faults the run and interrupts its parallel sibling. |
 | Serialized tree | A `[SerializeReference]` tree edited in the inspector and executed as caller-owned data. |
 | Object factory | A processor with a constructor dependency created by a custom `IObjectFactory`. |
+| Tree preset | A tree built from the `Presets/Pulse.commandtree` graph for the example's target. |
 | UniTask | Awaiting runs with a token, `AsyncCommandProcessor`, cancellation semantics. |
 
 Custom commands of the examples live in `Assets/Examples/Commands` together with their registration context and
@@ -581,9 +658,10 @@ builder shortcuts.
   presets (`Data/`), the executor with its settings and builder, handles and results, processor contracts, the
   object factory and the internal runtime (`TreeRunner`, nodes, pools, the player loop hook). It does not depend on
   `Essentials`.
-- `Essentials` — content on top of the kernel: the default commands with their builder shortcuts and presets, the
-  singleton and the optional UniTask integration (its own assembly).
-- `Editor` — the link.xml generator and the inspector drawers.
+- `Essentials` — content on top of the kernel: the default commands with their builder shortcuts and presets, tree
+  presets with their nodes (`TreePresets/`), the singleton and the optional UniTask integration (its own assembly).
+- `Editor` — the link.xml generator and the inspector drawers; `Editor/GraphToolkit` — tree preset graphs, their
+  importer and *Open in Graph Toolkit* (its own assembly, compiled on Unity 6000.6+).
 
 All folders share the `Pragma.CommandExecutor` namespace.
 
@@ -592,6 +670,7 @@ All folders share the `Pragma.CommandExecutor` namespace.
 This repository is a Unity project: the package is `Assets/PragmaCommandExecutor`.
 
 - `Assets/Tests/Editor` — EditMode tests: functional, UniTask and performance/zero-allocation (category `Performance`).
+- `Assets/Tests/Editor/GraphToolkit` — EditMode tests of tree preset graphs: import, validation, editing `.asset` presets.
 - `Assets/Tests/PlayMode` — PlayMode tests of auto-ticked executors in the real player loop: phases, unscaled time.
 - `Assets/Tests/Player` — a player smoke test for code stripping: *Tools → Pragma Command Executor → Build Player
   Smoke Test (High Stripping)* builds it for the active platform; the player reports `[Smoke] PASS/FAIL` on screen
