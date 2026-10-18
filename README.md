@@ -33,6 +33,7 @@ executor.GetBuilder(GroupMode.Sequential)
 - [Code stripping](#code-stripping)
 - [Performance](#performance)
 - [Examples](#examples)
+- [Skill for coding agents](#skill-for-coding-agents)
 - [Package layout](#package-layout)
 - [Development](#development)
 
@@ -652,6 +653,17 @@ play mode. Every example has Play / Cancel buttons:
 Custom commands of the examples live in `Assets/Examples/Commands` together with their registration context and
 builder shortcuts.
 
+## Skill for coding agents
+
+The package ships an agent skill in `Skills~/pragma-command-executor` (Unity ignores folders ending with `~`): how a
+game wires the executor, the API by moment, custom commands and processors, presets, tree presets and graphs, and what
+every exception and graph message means. Copy it into the skills folder of the game's project, e.g. for Claude Code:
+
+```bash
+cp -r Packages/com.pragma.commandexecutor/Skills~/pragma-command-executor .claude/skills/   # embedded package
+cp -r Library/PackageCache/com.pragma.commandexecutor@*/Skills~/pragma-command-executor .claude/skills/   # git package
+```
+
 ## Package layout
 
 - `Kernel` — everything the executor needs: commands and groups, the `Command<TContext, TData>` base with its
@@ -662,6 +674,7 @@ builder shortcuts.
   presets with their nodes (`TreePresets/`), the singleton and the optional UniTask integration (its own assembly).
 - `Editor` — the link.xml generator and the inspector drawers; `Editor/GraphToolkit` — tree preset graphs, their
   importer and *Open in Graph Toolkit* (its own assembly, compiled on Unity 6000.6+).
+- `Skills~` — the agent skill for projects that use the package.
 
 All folders share the `Pragma.CommandExecutor` namespace.
 
@@ -676,6 +689,8 @@ This repository is a Unity project: the package is `Assets/PragmaCommandExecutor
   Smoke Test (High Stripping)* builds it for the active platform; the player reports `[Smoke] PASS/FAIL` on screen
   and in its log.
 - `AGENTS.md` — architecture invariants and conventions for contributors and AI agents.
+- `.claude/skills/unity-verify` — a skill with scripts that compile the project and run every test suite in the running
+  Editor from the terminal, and get past the Editor states that block it.
 
 ## License
 

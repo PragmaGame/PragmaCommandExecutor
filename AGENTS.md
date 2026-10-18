@@ -20,6 +20,8 @@ The package is pre-1.0: backward compatibility is not required yet, prefer clean
 | `Assets/PragmaCommandExecutor/Editor` | Editor-only code shipped with the package: `CommandExecutorLinkerProcessor` (generated link.xml), inspector drawers (`ShowIfDrawer`, `CommandTreePresetKeyDrawer`). |
 | `Assets/PragmaCommandExecutor/Editor/GraphToolkit` | Tree preset graphs (`.commandtree`): graph and node types, `TreeNodeSchema` (ports from serialized fields), converter and builder between graphs and trees, the importer, *Open in Graph Toolkit* for `.asset` presets. Own asmdef, compiled only on `UNITY_6000_6_OR_NEWER`. |
 | `Assets/PragmaCommandExecutor/link.xml` | Keeps the package assemblies whole under managed code stripping. |
+| `Assets/PragmaCommandExecutor/Skills~/pragma-command-executor` | Agent skill shipped with the package for the projects that use it (`SKILL.md` + `references/`). |
+| `.claude/skills/unity-verify` | Development skill of this repository: compile and test in the running Editor (`scripts/compile.sh`, `scripts/test.sh`, `scripts/dialogs.ps1`). |
 | `Assets/Tests/Editor` | EditMode tests: functional (`CommandExecutorTests`), UniTask (`CommandExecutorUniTaskTests`), performance and zero-allocation (`CommandExecutorPerformanceTests`, category `Performance`). |
 | `Assets/Tests/Editor/GraphToolkit` | EditMode tests of tree preset graphs (own asmdef, `UNITY_6000_6_OR_NEWER`); they create and delete assets under `Assets/CommandTreeGraph*Tests`. |
 | `Assets/Tests/PlayMode` | PlayMode tests of auto-ticked executors in the real player loop (`CommandExecutorPlayerLoopTests`): phases, unscaled time, manual ticking. |
@@ -94,12 +96,15 @@ least compare the stripped assemblies in `Library/Bee/artifacts/<Platform>/Manag
 - Files use CRLF in the working tree. Keep an existing BOM, add none to new files.
 - Every asset has a `.meta` file that must be committed. Move or rename files together with their `.meta`
   (`git mv` both) so GUIDs survive; never edit GUIDs by hand.
-- Keep `README.md` in sync with public API changes.
+- Keep `README.md` and the shipped skill (`Skills~/pragma-command-executor`) in sync with public API changes; code in
+  the skill must compile (check snippets with `run_script`).
 
 ## Working with the Unity Editor
 
 The project has `com.unity.pipeline`, which exposes the running Editor to the `unity` CLI
-(`%LOCALAPPDATA%\Unity\bin\unity`), auto-discovered from the project directory:
+(`%LOCALAPPDATA%\Unity\bin\unity`), auto-discovered from the project directory. The `unity-verify` skill wraps the
+usual loop: `.claude/skills/unity-verify/scripts/compile.sh`, then `.claude/skills/unity-verify/scripts/test.sh all`.
+Raw commands:
 
 ```bash
 unity --no-banner --json command editor_status                         # must report "ready"
