@@ -21,7 +21,7 @@ namespace Pragma.CommandExecutor.Examples
 
         private void Start()
         {
-            _examples = FindObjectsByType<Example>(FindObjectsSortMode.None);
+            _examples = FindObjectsByType<Example>();
             Array.Sort(_examples, (a, b) => a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
         }
 

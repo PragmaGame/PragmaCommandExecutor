@@ -64,7 +64,7 @@ or add it to `Packages/manifest.json`:
 
 Append `#<tag or commit>` to the URL to pin a version.
 
-Requirements: developed and tested with Unity 6000.3. The code needs C# 9 and default interface methods
+Requirements: developed and tested with Unity 6000.6. The code needs C# 9 and default interface methods
 (Unity 2021.2 or newer). [UniTask](https://github.com/Cysharp/UniTask) is optional.
 
 ## Quick start

@@ -7,7 +7,7 @@ Guidance for AI agents (and humans) working in this repository.
 The development project of the Unity package `com.pragma.commandexecutor` — a tick based command executor.
 The package itself is `Assets/PragmaCommandExecutor` and is consumed through a git URL with
 `?path=Assets/PragmaCommandExecutor`; everything else in the project (tests, examples, settings) is not shipped.
-Editor version: see `ProjectSettings/ProjectVersion.txt` (developed on Unity 6000.3).
+Editor version: see `ProjectSettings/ProjectVersion.txt` (developed on Unity 6000.6).
 
 The package is pre-1.0: backward compatibility is not required yet, prefer clean renames over compatibility shims.
 
